@@ -1,10 +1,10 @@
 #DISTRIBUTIONS
 i <- 10000
 # 1. Standard Normal: mean = 0, standard deviation = 1
-normal_data <- rnorm(i, mean = 0, sd = 1)
+normal_data <- rnorm(n = i, mean = 0, sd = 1)
 
 # 2. Continuous Uniform: from 0 to 1
-uniform_data <- runif(i = N_obs, min = 0, max = 1)
+uniform_data <- runif(n = i, min = 0, max = 1)
 
 # 3. Six-sided die: values 1 through 6
 die_data <- sample(x = 1:6, size = i, replace = TRUE)
