@@ -2,12 +2,8 @@
 library(moments)
 library(nortest)
 library(fBasics)
+source("scripts/config.R")
 source("scripts/distributions.R")
-
-
-## Setting seeds ===============================================================
-student_id <- 020810348
-set.seed(student_id)
 
 
 ## Constants and Settings ======================================================
@@ -154,13 +150,11 @@ run_simulation <- function(
     # Histogram
     hist(
       sample_means,                                          #The data
-      breaks=20,                                             #Num of bins
       probability = TRUE,                                    #Density hist rather than freq hist
       col = "steelblue",                                     #Fill color
       border = "white",                                      #Border color
       main = paste("Sampling Distribution of Mean: n =", i), #Title
-      xlab = "Sample mean"                                  #x-axis label
-      #x-axis limit (min, max)
+      xlab = "Sample mean"                                   #x-axis label
     )
     
     curve(dnorm(x, mean = mc_mean, sd = mc_sd), add = TRUE, col = "firebrick", lwd = 2)
@@ -168,9 +162,13 @@ run_simulation <- function(
     # Q-Q
     qqnorm(
       sample_means,
-      main = paste("Q-Q Plot: n =", i)
+      main = paste("Q-Q Plot: n =", i),
+      pch = 46,
+      cex = 0.5
     )
     qqline(sample_means, col = "firebrick")
+    
+    grid(nx = NULL, ny = 0, lty = 3, col = "gray70")  #dotted grid line
     
   }
   
@@ -241,15 +239,20 @@ run_simulation <- function(
 
 # Run every distribution -------------------------------------------------------
 all_stats <- list()
+run_distributions <- c(
+  distributions_1
+)
 
 n <- c(
-  seq(1, 60, by = 2)         #Num of sample size needed to satisfy CLT
-) 
+  seq(1, 30, by = 1)        #Num of sample size needed to satisfy CLT
+  ) 
 
-for (distribution_name in names(distributions_2)) {
+for (distribution_name in names(run_distributions)) {
+  
+  message("Running: ", distribution_name)
   
   all_stats[[distribution_name]] <- run_simulation(
-    r_generator = distributions_2[[distribution_name]],
+    r_generator = run_distributions[[distribution_name]],
     distribution_name = distribution_name,
     n = n,
     R = R,
