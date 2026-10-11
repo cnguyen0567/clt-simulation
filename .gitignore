@@ -3,5 +3,6 @@
 .RData
 .Ruserdata
 resources/
+results/old.zip
 scripts/test.R
 scripts/distribution - test.R
