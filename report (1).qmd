@@ -46,7 +46,8 @@ library(knitr)
 gens <- tryCatch({
   source("scripts/config.R")
   source("scripts/distributions.R")
-  c(dist_normal, dist_uniform, dist_die, dist_exponential)
+  c(dist_normal, dist_uniform, dist_die, dist_exponential,
+    dist_poisson, dist_binom_small, dist_binom_large, dist_cauchy, dist_death)
 }, error = function(e) {
   message("Could not load scripts/: ", conditionMessage(e))
   list()
@@ -67,29 +68,54 @@ meta <- data.frame(
   dist = c("normal",
            "uniform",
            "die",
-           "exponential"
+           "exponential",
+           "poisson",
+           "binomial_small",
+           "binomial_large",
+           "cauchy",
+           "rdeath"                       # name used by dist_death in distributions.R
            ),
   label = c("Normal(0, 1)",
             "Uniform(0, 1)",
             "Six-sided die",
-            "Exponential(1)"
+            "Exponential(1)",
+            "Poisson(1)",
+            "Small Binomial(5, 0.10)",
+            "Large Binomial(20, 0.50)",
+            "Cauchy(0, 1)",
+            "Age at death (bimodal)"
             ),
   params = c("\u03bc = 0, \u03c3 = 1",
              "a = 0, b = 1",
              "Values 1\u20136, equally likely",
-             "\u03bb = 1 (mean = 1)"
+             "\u03bb = 1 (mean = 1)",
+             "\u03bb = 1 (mean = 1)",
+             "size = 5, p = 0.10",
+             "size = 20, p = 0.50",
+             "location = 0, scale = 1",
+             "Ages 0\u2013100; exponential decay (rate 1/5) plus a normal bump centred at 65 (SD 10)"
              ),
   gen = c("rnorm(n, 0, 1)",
           "runif(n, 0, 1)",
           "sample(1:6, n, replace = TRUE)",
-          "rexp(n, rate = 1)"
+          "rexp(n, rate = 1)",
+          "rpois(n, lambda = 1)",
+          "rbinom(n, size = 5, prob = 0.10)",
+          "rbinom(n, size = 20, prob = 0.50)",
+          "rcauchy(n, location = 0, scale = 1)",
+          "sample(0:100, n, replace = TRUE, prob = death_distribution$probability)"
           ),
   trait = c("Normal",
             "Bounded, symmetric, non-normal",
             "Discrete uniform",
-            "Strong right skewed"
+            "Strong right skewed",
+            "Discrete, right skewed",
+            "Discrete, strongly right skewed",
+            "Discrete, symmetric",
+            "Heavy-tailed, no finite mean or variance",
+            "Bimodal, discrete"
             ),
-  discrete = c(FALSE, FALSE, TRUE, FALSE),
+  discrete = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE),
   stringsAsFactors = FALSE
 )
 
@@ -121,7 +147,14 @@ pop_draws <- lapply(setNames(meta$dist, meta$dist), function(d) {
   tryCatch(as.numeric(g(N_POP)), error = function(e) NULL)
 })
 exact <- list(normal = c(0, 1), uniform = c(0.5, sqrt(1 / 12)), die = c(3.5, sqrt(35 / 12)),
-              exponential = c(1, 1))
+              exponential = c(1, 1), poisson = c(1, 1),
+              binomial_small = c(0.5, sqrt(5 * 0.10 * 0.90)),
+              binomial_large = c(10, sqrt(20 * 0.50 * 0.50)),
+              cauchy = c(NA_real_, NA_real_))               # no finite mean or variance
+if (exists("death_distribution")) {                         # exact moments of the age-at-death pmf
+  mu_d <- sum(death_distribution$age * death_distribution$probability)
+  exact$rdeath <- c(mu_d, sqrt(sum((death_distribution$age - mu_d)^2 * death_distribution$probability)))
+}
 pop_info <- do.call(rbind, lapply(meta$dist, function(d) {
   if (!is.null(exact[[d]]))
     return(data.frame(dist = d, mu = exact[[d]][1], sigma = exact[[d]][2], src = "exact"))
@@ -196,6 +229,7 @@ plot_population <- function(d) {
   disc <- meta$discrete[meta$dist == d]
   sub  <- if (is.na(info$mu)) "Mean undefined (no finite mean); display clipped to [-20, 20]"
           else sprintf("μ = %.3f, σ = %.3f (%s)", info$mu, info$sigma, info$src)
+  if (is.na(info$mu)) x <- x[abs(x) <= 20]        # undefined mean: clip the display window
   p <- ggplot(data.frame(x = x), aes(x))
   p <- if (disc) p + geom_bar(aes(y = after_stat(prop), group = 1), fill = blue, width = 0.8)
        else p + geom_histogram(aes(y = after_stat(density)), bins = 60, fill = blue,
@@ -282,7 +316,39 @@ stats_table <- function(d, ns = get_n(d)) {
 # ---- EDIT HERE: your judgement calls ------------------------------------------
 # Smallest n you defend as normal enough. NA = use the automatic rule from setup.
 n_final <- setNames(rep(NA_real_, nrow(meta)), meta$dist)
-# n_final["exponential"] <- 100
+n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 23, poisson = 15,
+             binomial_small = 27, binomial_large = 2, rdeath = 7)
+n_final[names(n_given)] <- n_given
+
+# Distributions for which no n works (CLT assumptions violated): reported as "None"
+no_clt <- "cauchy"
+
+# Chosen n for a distribution (NA = none)
+chosen_n <- function(d) {
+  if (d %in% no_clt) return(NA_real_)
+  if (!is.na(n_final[d])) return(unname(n_final[d]))
+  stable_n(res[res$dist == d, ])
+}
+
+# The single row of `res` reported for a distribution: its chosen n, or the largest n
+# tested when no n qualifies. If the chosen n was never simulated, the statistics are
+# left blank rather than borrowed from a different n.
+report_row <- function(d) {
+  x <- res[res$dist == d, ]
+  if (!nrow(x)) return(NULL)
+  ch <- chosen_n(d)
+  if (is.na(ch)) return(x[which.max(x$n), ])
+  r <- x[x$n == ch, ][1, ]
+  if (is.na(r$n)) {
+    message("n = ", ch, " for '", d, "' is not in stats_results_", d,
+            ".csv: add it to `n` in main.R and rerun.")
+    r <- x[1, ]
+    r[, vapply(r, is.numeric, logical(1))] <- NA_real_
+    r$n <- ch
+    r$normal_enough <- NA
+  }
+  r
+}
 
 # One-line key observation per distribution for the summary table
 key_obs <- setNames(rep("(add)", nrow(meta)), meta$dist)
@@ -305,21 +371,21 @@ The sample size $n$ to which the sampling distribution yields adequately "normal
 ::: finding-grid
 ::: {.finding .fast}
 <div class="tag">Fast</div>
-<div class="big">n ≤ 10</div>
-<p>Symmetrical, light-tailed, unimodal/continuous</p>
-<p>Distributions: Normal, Uniform, Binomial Large</p>
+<div class="big">n ≤ 15</div>
+<p>Symmetrical, light-tailed</p>
+<p>Distributions: Normal, Uniform, Die, Poisson, Binomial Large, Death distribution</p>
 :::
 ::: {.finding .mod}
 <div class="tag">Moderate</div>
 <div class="big">n ≈ 30</div>
-<p>Discrete or lightly skewed</p>
-<p>Distributions: Die, Exponential, Poisson, Binomial Small</p>
+<p>Highly discrete or skewed</p>
+<p>Distributions: Exponential, Binomial Small</p>
 :::
 ::: {.finding .slow}
 <div class="tag">Slow</div>
 <div class="big">n ≫ 30</div>
 <p>Heavily skewed</p>
-<p>Distributions: Poison</p>
+<p>Distributions:</p>
 :::
 ::: {.finding .fail}
 <div class="tag">Fails</div>
@@ -358,22 +424,18 @@ The table below gives the smallest sample size $n$ at which the sampling distrib
 
 ```{r}
 #| label: tbl-summary
-#| tbl-cap: "Smallest sample size judged normal for each distribution, with the summary statistics"
+#| tbl-cap: "Smallest sample size judged normal for each distribution, with the summary statistics at that n. Cauchy has no such n, so its statistics are shown at the largest n tested."
 summ <- do.call(rbind, lapply(meta$dist, function(d) {
-  x <- res[res$dist == d, ]
-  if (!nrow(x)) return(NULL)
-  x <- x[order(x$n), ]
-  chosen <- if (!is.na(n_final[d])) n_final[[d]] else stable_n(x)
-  i <- if (is.na(chosen)) which.max(x$n) else which(x$n == chosen)[1]
-  if (is.na(i)) i <- which.min(abs(x$n - chosen))
+  r <- report_row(d)
+  if (is.null(r)) return(NULL)
   data.frame(
     Distribution   = meta$label[meta$dist == d],
     Characteristic = meta$trait[meta$dist == d],
-    n_ok = as.numeric(chosen),
-    Mean = x$Mean[i],
-    SD   = x$SD[i],
-    Skew = x$Skewness[i],
-    Kurt = x$Kurtosis[i],
+    n_ok = chosen_n(d),
+    Mean = r$Mean,
+    SD   = r$SD,
+    Skew = r$Skewness,
+    Kurt = r$Kurtosis,
     stringsAsFactors = FALSE
   )
 }))
@@ -381,7 +443,7 @@ summ <- do.call(rbind, lapply(meta$dist, function(d) {
 g <- summ |>
   gt() |>
   cols_label(Distribution = "Distribution", Characteristic = "Characteristic",
-             n_ok = "Smallest n", Mean = "Mean", SD = "Sample Standard Deviation",
+             n_ok = "Smallest n", Mean = "Mean", SD = "Standard Deviation",
              Skew = "Skewness", Kurt = "Kurtosis") |>
   fmt_number(columns = c("Mean", "SD"), decimals = 3) |>
   fmt_number(columns = c("Skew", "Kurt"), decimals = 2) |>
@@ -502,34 +564,29 @@ diag_tbl <- data.frame(
   ),
 
   Note = c(
-    "Measures centering and does not establish normality by itself",
-    "A large mean–median difference may indicate asymmetry",
+    "",
+    "",
     paste0(
-      "The usual σ/√n formula may not apply to dependent, ",
+      "σ/√n formula may not apply to dependent, ",
       "non-identical, or heavy-tailed observations"
     ),
-    paste0(
-      "The code also calculates SE_skew = √(6/R) and its Z-score. ",
-      "The Z-score is supporting evidence because R = ",
-      Rfmt,
-      " makes it sensitive to small departures"
+    paste0("The Z-score is not supporting evidence because large R",
+     " makes it sensitive to small departures"
     ),
-    paste0(
-      "Pearson kurtosis is used, so the normal reference is 3. ",
-      "The code also calculates SE_kurt = √(24/R) and its Z-score"
+    paste0("The Z-score is not supporting evidence because large R",
+     " makes it sensitive to small, impractical departures"
     ),
     "Small, unsystematic deviations are acceptable",
-    "Systematic curvature or large tail departures suggest non-normality",
-    paste0(
-      "A random sample of up to 5,000 observations is used because ",
-      "`shapiro.test()` has a 5,000-observation limit. The p-value is ",
-      "supporting evidence because R = ",
-      Rfmt,
-      " is large"
+    "Small, unsystematic deviations are acceptable",
+    paste0("The p-value is not supporting evidence because large R ",
+      " makes it sensitive to small, impractical departures."
     ),
-    "The Lilliefors correction accounts for estimating the normal mean and standard deviation from the data",
-    "The Anderson–Darling test places greater weight on tail departures",
-    "Combines skewness and kurtosis; the p-value is supporting evidence rather than the sole decision rule"
+    paste0("The p-value is not supporting evidence because large R ",
+      " makes it sensitive to small, impractical departures."
+    ),
+    paste0("Tail departure may be accepted if center of data is approx normal."
+    ),
+    "Not primary supporting evident because large R makes it makes it sensitive to small, impractical departures."
   ),
 
   stringsAsFactors = FALSE
@@ -628,19 +685,20 @@ Because $R = `r format(R, big.mark = ",")`$, these tests have high statistical p
 
 ```{r}
 #| label: tbl-detail
-#| tbl-cap: "Every statistic for every population and sample size. A check mark means that row meets the normal-enough thresholds."
-detail <- res
-detail$Ok <- ifelse(detail$normal_enough, "✓", "")
+#| tbl-cap: "Every statistic for each population at the smallest sample size judged normal. A check mark means that row meets the normal-enough thresholds. Cauchy has no such n, so its largest tested n is shown."
+detail <- do.call(rbind, lapply(meta$dist, report_row))
+detail$Ok <- ifelse(!is.na(detail$normal_enough) & detail$normal_enough, "✓", "")
 dcols <- intersect(c("label", "n", "Mean", "Median", "SD", "Skewness", "Z_s", "Kurtosis",
                      "Z_k", p_cols, "Ok"), names(detail))
 dd <- detail[, dcols, drop = FALSE]
 dd$label <- as.character(dd$label)
 for (v in intersect(p_cols, names(dd))) dd[[v]] <- fmt_p(dd[[v]])
-gt(dd, groupname_col = "label") |>
-  cols_label(.list = as.list(col_labels[names(col_labels) %in% names(dd) & names(col_labels) != "label"])) |>
+gt(dd) |>
+  cols_label(.list = as.list(col_labels[names(col_labels) %in% names(dd)])) |>
   fmt_number(columns = any_of(c("Mean", "Median", "SD", "Skewness", "Kurtosis", "Z_s", "Z_k")),
              decimals = 3) |>
   fmt_integer(columns = "n") |>
+  sub_missing(missing_text = "—") |>
   style_gt(12)
 ```
 
@@ -826,6 +884,241 @@ show_hist_qq("exponential")
 #| label: tbl-stats-exponential
 #| tbl-cap: "Normality diagnostics for Exponential(1) at the selected n."
 stats_table("exponential")
+```
+
+**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Poisson(1)
+
+### Description
+
+**Prediction before running.** *(What do you expect for this population, and why?)*
+
+```{r}
+#| label: fig-pop-poisson
+#| fig-cap: "Population distribution for Poisson(1) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("poisson")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-poisson
+#| fig-cap: "How the sampling distribution of the mean changes with n for Poisson(1). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("poisson")
+```
+
+*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-poisson
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("poisson")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-poisson
+#| tbl-cap: "Normality diagnostics for Poisson(1) at the selected n."
+stats_table("poisson")
+```
+
+**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Small Binomial(5, 0.10)
+
+### Description
+
+**Prediction before running.** *(What do you expect for this population, and why?)*
+
+```{r}
+#| label: fig-pop-binomial-small
+#| fig-cap: "Population distribution for Small Binomial(5, 0.10) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("binomial_small")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-binomial-small
+#| fig-cap: "How the sampling distribution of the mean changes with n for Small Binomial(5, 0.10). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("binomial_small")
+```
+
+*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-binomial-small
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("binomial_small")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-binomial-small
+#| tbl-cap: "Normality diagnostics for Small Binomial(5, 0.10) at the selected n."
+stats_table("binomial_small")
+```
+
+**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Large Binomial(20, 0.50)
+
+### Description
+
+**Prediction before running.** *(What do you expect for this population, and why?)*
+
+```{r}
+#| label: fig-pop-binomial-large
+#| fig-cap: "Population distribution for Large Binomial(20, 0.50) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("binomial_large")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-binomial-large
+#| fig-cap: "How the sampling distribution of the mean changes with n for Large Binomial(20, 0.50). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("binomial_large")
+```
+
+*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-binomial-large
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("binomial_large")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-binomial-large
+#| tbl-cap: "Normality diagnostics for Large Binomial(20, 0.50) at the selected n."
+stats_table("binomial_large")
+```
+
+**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Cauchy(0, 1)
+
+### Description
+
+**Prediction before running.** *(What do you expect for this population, and why?)*
+
+```{r}
+#| label: fig-pop-cauchy
+#| fig-cap: "Population distribution for Cauchy(0, 1) (50,000 simulated draws, display clipped to [−20, 20]). The mean is undefined, so no mean line is drawn."
+#| fig-height: 3.4
+plot_population("cauchy")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-cauchy
+#| fig-cap: "How the sampling distribution of the mean changes with n for Cauchy(0, 1). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("cauchy")
+```
+
+*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-cauchy
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("cauchy")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-cauchy
+#| tbl-cap: "Normality diagnostics for Cauchy(0, 1) at the selected n."
+stats_table("cauchy")
+```
+
+**Chosen n and justification.** *(State that no n is defensible and why: no finite mean or variance, so the sample mean is itself Cauchy at every n.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Age at death (bimodal)
+
+### Description
+
+**Prediction before running.** *(What do you expect for this population, and why?)*
+
+```{r}
+#| label: fig-pop-rdeath
+#| fig-cap: "Population distribution for Age at death (bimodal) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("rdeath")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-rdeath
+#| fig-cap: "How the sampling distribution of the mean changes with n for Age at death (bimodal). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("rdeath")
+```
+
+*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-rdeath
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("rdeath")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-rdeath
+#| tbl-cap: "Normality diagnostics for Age at death (bimodal) at the selected n."
+stats_table("rdeath")
 ```
 
 **Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*

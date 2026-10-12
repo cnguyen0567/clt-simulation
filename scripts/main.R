@@ -274,7 +274,7 @@ run_distributions <- c(
 
 n <- c(
   seq(1, 20, by = 1),        #Num of sample size needed to satisfy CLT
-  seq(25, 50, by = 5)
+  seq(100, 800, by = 100)
   ) 
 
 for (distribution_name in names(run_distributions)) {
