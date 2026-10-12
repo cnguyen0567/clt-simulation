@@ -3,6 +3,8 @@
 .RData
 .Ruserdata
 resources/
-results/old.zip
+test/
+results/old/
+results/figures/
 scripts/test.R
 scripts/distribution - test.R

@@ -2,7 +2,11 @@
 required_packages <- c(
   "moments",
   "nortest",
-  "fBasics"
+  "fBasics",
+  "ggplot2",
+  "gt",
+  "scales",
+  "dplyr"
 )
 
 for (pkg in required_packages) {

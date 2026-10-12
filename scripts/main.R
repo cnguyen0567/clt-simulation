@@ -3,6 +3,7 @@ library(moments)
 library(nortest)
 library(fBasics)
 source("scripts/config.R")
+set.seed(STUDENT_ID)
 source("scripts/distributions.R")
 
 
@@ -19,12 +20,13 @@ stats_col = c("n",
               "Mean",
               "Median",
               "SD",
+              "Theo_SE",
               "Skewness",
-              "SE_s",
-              "Z_s",
+              "SE_skew",
+              "Z_skew",
               "Kurtosis",
-              "SE_k",
-              "Z_k",
+              "SE_kurt",
+              "Z_kurt",
               "SW_W",
               "SW_p",
               "Lillie_D",
@@ -38,15 +40,25 @@ stats_col = c("n",
 
 ## Simulation Function =========================================================
 run_simulation <- function(
-    r_generator,
-    distribution_name,
-    n,
-    R,
-    stats_col
+    r_generator,                                            #random generator
+    distribution_name,                                      #name for labels
+    n,                                                      #no of sampling amount
+    R,                                                      #no of MC simulation 
+    stats_col                                               #columns to store the stats
 ) {
   
-  #Data files and table: -------------------------------------------------------
-  pdf_path <- file.path(
+  #Data files and table to save results: ---------------------------------------
+  fig_dir <- file.path("results", "figures")
+  dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  save_png <- function(name, kind, n, plot_fun) {
+    png(file.path(fig_dir, sprintf("%s_%s_n%d.png", name, kind, n)),
+        width = 1200, height = 900, res = 200)
+    plot_fun()
+    dev.off()
+  }
+  
+    pdf_path <- file.path(
     "results",
     paste0("normality_plots_", distribution_name, ".pdf")
   )
@@ -68,10 +80,12 @@ run_simulation <- function(
   )
   
   #Monte Carlo (MC) Simulation: ------------------------------------------------
-  par(mfrow = c(3, 2))
+  par(mfrow = c(3, 2))                                        #Set the subplot layout
   
   for (j in seq_along(n)) {
-  
+    
+    #Run the MC R times for each n sample
+    set.seed(STUDENT_ID)                                      #Reset seed for each simulation
     i <- n[j]
     sample_means <- replicate(
       R,
@@ -83,6 +97,7 @@ run_simulation <- function(
             paste(distribution_name, "generator returned", length(one_sample), "points instead of", i)
           )
         }
+        
         mean(one_sample)
       }
     )
@@ -92,6 +107,7 @@ run_simulation <- function(
     mc_mean <- mean(sample_means)
     mc_median <- median(sample_means)
     mc_sd <- sd(sample_means)
+    theo_se <- mc_sd / sqrt(i)
     
     # 2. Skewness
     mc_skew <- moments::skewness(sample_means)
@@ -130,6 +146,7 @@ run_simulation <- function(
       round(mc_mean, 5),
       round(mc_median, 5),
       round(mc_sd, 5),
+      round(theo_se, 5),
       round(mc_skew, 3),
       round(mc_skew_se, 3),
       round(mc_skew_z,3),
@@ -168,7 +185,19 @@ run_simulation <- function(
     )
     qqline(sample_means, col = "firebrick")
     
-    grid(nx = NULL, ny = 0, lty = 3, col = "gray70")  #dotted grid line
+    grid(nx = NULL, ny = NULL, lty = 3, col = "gray70")  #dotted grid line
+    
+    #Export the individual graphical results as png-------------------------------
+    save_png(distribution_name, "hist", i, function() {
+      hist(sample_means, probability = TRUE, col = "steelblue", border = "white",
+           main = paste("Sampling Distribution of Mean: n =", i), xlab = "Sample mean")
+      curve(dnorm(x, mean = mc_mean, sd = mc_sd), add = TRUE, col = "firebrick", lwd = 2)
+    })
+    save_png(distribution_name, "qq", i, function() {
+      qqnorm(sample_means, main = paste("Q-Q Plot: n =", i), pch = 46, cex = 2)
+      qqline(sample_means, col = "firebrick")
+      grid(nx = NULL, ny = NULL, lty = 3, col = "gray70")  #dotted grid line
+    })
     
   }
   
@@ -240,15 +269,15 @@ run_simulation <- function(
 # Run every distribution -------------------------------------------------------
 all_stats <- list()
 run_distributions <- c(
-  distributions_1
+  dist_death
 )
 
 n <- c(
-  seq(1, 30, by = 1)        #Num of sample size needed to satisfy CLT
+  seq(1, 20, by = 1),        #Num of sample size needed to satisfy CLT
+  seq(25, 50, by = 5)
   ) 
 
 for (distribution_name in names(run_distributions)) {
-  
   message("Running: ", distribution_name)
   
   all_stats[[distribution_name]] <- run_simulation(

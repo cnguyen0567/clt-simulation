@@ -44,7 +44,7 @@ data.frame(
 
 # Simulate 1 game using binomial w/ the custom probability: whether or not he made each shot in the game
 game_simulation <- function() {
-  made <- rbinom(n = n_shots, size = 1, prob = p)
+  made <- rbinom(n = n_shots, size = 1, prob = p)      #Create a table of bernoulli results
 
   one_game <- data.frame(
   shot = shot_number,
@@ -52,7 +52,7 @@ game_simulation <- function() {
   made = made
   )
 
-  return(sum(made))              #return the total # shot made in the game
+  return(sum(made))                                    #return the total # shot made in the game by summing the 1s (success)
 }
 
 ## Custom Age-at-Death Distribution ============================================
