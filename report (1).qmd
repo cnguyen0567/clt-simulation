@@ -59,8 +59,8 @@ R           <- 10000                         # Monte Carlo repetitions (match ma
 results_dir <- "results"                     # stats_results_<name>.csv live here
 fig_dir     <- file.path(results_dir, "figures")  # <name>_hist_n<n>.png / <name>_qq_n<n>.png
 N_POP       <- 50000                         # draws used to display each population
-skew_tol    <- 0.5                          # normal enough: |skewness| <= 0.10
-kurt_tol    <- 1                          # and |Pearson kurtosis - 3| <= 0.20
+skew_tol    <- 0.5                           # normal enough: |skewness| <= 0.10
+kurt_tol    <- 1                             # and |Pearson kurtosis - 3| <= 0.20
 
 navy <- "#12263f"; blue <- "#1b4f72"; accent <- "#c8553d"; grey <- "#616e7c"
 
@@ -240,37 +240,30 @@ pick_n <- function(d) {
   sort(unique(c(min(ns), ns[which.min(abs(ns - 30))], ns[ceiling(length(ns) / 2)], max(ns))))
 }
 
-# ==== EDIT HERE: which n to display for each distribution ======================
-# Two separate lists:
-#   n_show_plot  -> n values for the histogram + Q-Q figures
-#   n_show_table -> n values for the "Formal Test Results" table
-# Each entry must be an n that was simulated in main.R (figures only exist for those n).
-# The first value is the chosen (smallest) n; the others are placeholders to replace.
-# A distribution left out of a list falls back to the default pick_n() selection.
 n_show_plot <- list(
   normal         = c(1),
-  uniform        = c(7),
-  die            = c(2, 4, 12, 30, 34),
-  exponential    = c(23),
-  poisson        = c(15),
+  uniform        = c(2, 7, 10),
+  die            = c(2, 4, 12, 34),
+  exponential    = c(14, 34, 100, 1000),
+  poisson        = c(18, 30, 500),
   binomial_small = c(10, 27, 500),
-  binomial_large = c(2, 3, 10, 18),
+  binomial_large = c(2),
   cauchy         = c(800),
-  rdeath         = c(2, 7, 200),
-  rdependent     = c(20, 82),
+  rdeath         = c(2, 7, 20),
+  rdependent     = c(26, 66, 191, 500),
   rnonidentical  = c(3, 10)
 )
 n_show_table <- list(
   normal         = c(1, 5, 20),
-  uniform        = c(2, 7, 10),
-  die            = c(7, 12, 22, 30, 34),
-  exponential    = c(10, 23, 33, 100, 800),
-  poisson        = c(5, 15, 150, 500),
+  uniform        = c(2:10),
+  die            = c(2, 4, 12, 20, 30, 34),
+  exponential    = c(10, 14, 24, 30, 32, 34, 36, 100, 300, 600, 1000),
+  poisson        = c(4, 17, 18, 19, 28, 30, 32, 34, 100, 250, 500),
   binomial_small = c(6, 27, 200, 500),
-  binomial_large = c(2, 3, 10, 18),
+  binomial_large = c(1, 2, 3, 5, 10),
   cauchy         = c(100, 300, 500, 800),
-  rdeath         = c(2, 7, 100, 200),
-  rdependent     = c(10, 82, 200, 500),
+  rdeath         = c(2, 7, 20, 200, 300, 400),
+  rdependent     = c(26, 66, 191, 201, 401, 500),
   rnonidentical  = c(1, 3, 10, 20)
 )
 get_n_plot  <- function(d) if (!is.null(n_show_plot[[d]]))  n_show_plot[[d]]  else pick_n(d)
@@ -398,9 +391,9 @@ stats_table <- function(d, ns = get_n_table(d)) {
 # ---- EDIT HERE: your judgement calls ------------------------------------------
 # Smallest n you defend as normal enough. NA = use the automatic rule from setup.
 n_final <- setNames(rep(NA_real_, nrow(meta)), meta$dist)
-n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 27, poisson = 15,
-             binomial_small = 50, binomial_large = 2, rdeath = 20,
-             rdependent = 82, rnonidentical = 10)
+n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 32, poisson = 30,
+             binomial_small = 30, binomial_large = 2, rdeath = 20,
+             rdependent = 191, rnonidentical = 10)
 n_final[names(n_given)] <- n_given
 
 # Distributions for which no n works (CLT assumptions violated): reported as "None"
@@ -456,29 +449,29 @@ The sample size $n$ to which the sampling distribution yields adequately "normal
 <div class="tag">Fast</div>
 <div class="big">n ≤ 12</div>
 <p>Symmetrical, light-tailed</p>
-<p>Distributions: Normal (n = 1), Uniform (n = 7), Die (n = 12), Binomial Large (n = 2)</p>
+<p>Distributions: Normal, Uniform, Die, Binomial Large, R Nonidentical</p>
 :::
 ::: {.finding .mod}
 <div class="tag">Moderate</div>
-<div class="big">n = 15–27</div>
+<div class="big">n ≈ 30</div>
 <p>Highly discrete or skewed</p>
-<p>Distributions: Poisson (n = 15), Exponential (n = 27), Death distribution (n = 20)</p>
+<p>Distributions: Poisson, Exponential, Death distribution</p>
 :::
 ::: {.finding .slow}
 <div class="tag">Slow</div>
-<div class="big">n = 50</div>
+<div class="big">n >> 30</div>
 <p>Heavily skewed</p>
-<p>Distributions: Binomial Small (n = 50)</p>
+<p>Distributions: Binomial Small, Dependent</p>
 :::
 ::: {.finding .fail}
 <div class="tag">Fails</div>
 <div class="big">N/A</div>
 <p>Heavy-tailed and/or Violate theorem's assumption.</p>
-<p>Distributions: Cauchy (no finite mean); Dependent.</p>
+<p>Distributions: Cauchy (no finite mean)</p>
 :::
 :::
 
-The CLT describes the sampling distribution of the mean regardless of the underlying population distribution. However, the theorem makes several assumptions about the sampled observations, and violating them may not yield normal results:
+The CLT describes the sampling distribution of the mean regardless of the underlying population distribution. However, the theorem makes several assumptions about the sampled observations, and violating them may not or very slowly (if does) yield normal results:
 
 - Observations are independent
 - Observations are identically distributed
@@ -513,7 +506,6 @@ summ <- do.call(rbind, lapply(meta$dist, function(d) {
   if (is.null(r)) return(NULL)
   data.frame(
     Distribution   = meta$label[meta$dist == d],
-    Characteristic = meta$trait[meta$dist == d],
     n_ok = chosen_n(d),
     Mean = r$Mean,
     SD   = r$SD,
@@ -525,7 +517,7 @@ summ <- do.call(rbind, lapply(meta$dist, function(d) {
 
 g <- summ |>
   gt() |>
-  cols_label(Distribution = "Distribution", Characteristic = "Characteristic",
+  cols_label(Distribution = "Distribution",
              n_ok = "Smallest n", Mean = "Mean", SD = "Standard Deviation",
              Skew = "Skewness", Kurt = "Kurtosis") |>
   fmt_number(columns = c("Mean", "SD"), decimals = 3) |>
@@ -561,13 +553,11 @@ dist_tbl |>
 ```
 
 ## Simulation
-The investigation used a Monte Carlo simulation-based experimental design to examine how the sampling distribution of the sample mean changes as the sample size, \(n\), increases. The random seed defined in `scripts/config.R` was reset before each population distribution to ensure reproducibility, regardless of the order in which distributions were tested.
+The investigation used a Monte Carlo simulation-based experimental design to examine how the sampling distribution of the sample mean changes as the sample size, $n$, increases. The random seed defined in `scripts/config.R` was reset before each population distribution to ensure reproducibility, regardless of the order in which distributions were tested.
 
-For each population distribution listed in [Section 2.1](#distributions-studied), \(n\) represents the number of observations in one random sample. The appropriate random-generation function was used to generate a sample of size \(n\), and its mean was calculated. This process was repeated \(R =\), representing the number of simulation, `r format(R, big.mark = ",")` times using `replicate()`. The resulting \(R\) sample means formed the empirical sampling distribution used for analysis.
+For each population distribution listed in [Section 2.1](#distributions-studied), $n$ represents the number of observations in one random sample. The appropriate random-generation function was used to generate a sample of size $n$, and its mean was calculated. This process was repeated $R = `r format(R, big.mark = ",")`, representing the number of simulation, using `replicate()`. The resulting R sample means formed the empirical sampling distribution used for analysis.
 
-This process was repeated for each value of \(n\) in a defined sequence, varying from 1 up to 1000. Results were compared across sample sizes to identify the smallest \(n\) for which the sampling distribution appeared approximately normal.
-
-As a quality-control check, the complete analysis was rerun using a different random seed. The results and conclusions were compared to assess the robustness of the simulation findings and the conclusions regarding the Central Limit Theorem.
+This process was repeated for each value of $n$ in a defined sequence, varying from 1 up to 1000. Results were compared across sample sizes to identify the smallest $n$ for which the sampling distribution appeared approximately normal.
 
 ## Statistical Tests
 
@@ -715,7 +705,7 @@ The **histogram (`hist()`)** was used to assess whether the sampling distributio
 
 The normal **Q–Q plot (`qqnorm()`)** was used to assess whether the ordered sample means followed an approximately straight-line pattern. Small, unsystematic deviations are acceptable, but systematic curvature or large tail departures suggest non-normality.
 
-For reference, at $n = 1$ each sample mean is a single draw from the Normal(0, 1) population, so the figure below shows what an exactly normal sampling distribution looks like: a bell-shaped histogram that follows the fitted curve, and Q–Q points that lie on the line.
+See figures below for illustration.
 
 ```{r}
 #| label: fig-graphical-example
@@ -726,15 +716,15 @@ show_hist_qq("normal", ns = 1)
 
 ### Formal Normality Tests
 
-The  **Shapiro–Wilk (SW) (`shapiro.test()`)** test, from the `stats` library, compares the ordered sample observations with the expected order statistics from a normal distribution and summarizes their agreement with the \(W\)-statistic. Values of \(W\) closer to \(1\) indicate strong overlap with the normal bell curve and Q-Q plot. The statistic provides a numerical supplement to the visual histogram and Q–Q plot.
+The  **Shapiro–Wilk (SW) (`shapiro.test()`)** test, from the `stats` library, compares the ordered sample observations with the expected order statistics from a normal distribution and summarizes their agreement with the $W$-statistic. Values of $W$ closer to 1 indicate strong overlap with the normal bell curve and Q-Q plot. The statistic provides a numerical supplement to the visual histogram and Q–Q plot.
 
 Because this function accepts no more than 5,000 observations, a random sample of up to 5,000 simulated sample means was selected without replacement using `sample()`.
 
-The null hypothesis is that the simulated sample means come from a normal distribution. A \(p\)-value greater than \(0.05\) indicates insufficient evidence to reject this hypothesis.
+The null hypothesis is that the simulated sample means come from a normal distribution. A $p$-value ≥ 0.05 indicates insufficient evidence to reject this hypothesis.
 
 The **Lilliefors-corrected Kolmogorov–Smirnov (KS) test** (`lillie.test()`), from the `nortest` library, compares the empirical cumulative distribution function (CDF) of the simulated sample means with the CDF of a fitted normal distribution. The Lilliefors correction accounts for the fact that the normal distribution’s mean and standard deviation are estimated from the data rather than known in advance.
 
-The \(D\)-statistic is the maximum absolute vertical difference between the empirical CDF and the fitted normal CDF. It summarizes the largest discrepancy but does not identify its location or cause. Therefore, a large \(D\)-statistic may reflect a localized deviation, such as a tail discrepancy or outlying observations, and should be interpreted alongside the histogram, Q–Q plot, and other normality diagnostics.
+The $D$-statistic is the maximum absolute vertical difference between the empirical CDF and the fitted normal CDF. It summarizes the largest discrepancy but does not identify its location or cause. Therefore, a large $D$-statistic may reflect a localized deviation, such as a tail discrepancy or outlying observations, and should be interpreted alongside the histogram, Q–Q plot, and other normality diagnostics.
 
 p-value for this test serve same function as the Shapiro–Wilk test.
 
@@ -749,9 +739,9 @@ knitr::include_graphics("images/fig-ks-test.png")
 
 The **Anderson–Darling (AD) test** (`ad.test()`), from `nortest` library, also compares the empirical CDF with the fitted normal CDF, but it applies greater weight to discrepancies in the distribution tails. The $A$-statistic also outputs a single point of greatest difference.
 
-Because the tails receive greater weight, a deviation near the tails can produce a relatively large $A$-statistic even when the center of the distribution appears approximately normal. The test is also sensitive to the large number of simulated sample means, so small departures from normality may produce small $p$-values. Therefore, the AD test was treated as supporting evidence and interpreted alongside the graphical diagnostics and other normality measures.
+Because the tails receive greater weight, a deviation near the tails can produce a relatively large $A$-statistic even when the center of the distribution appears approximately normal. The test is also sensitive to the large number of simulated sample means, so small departures from normality may produce small $p$-values. Therefore, the AD test was treated as reference and interpreted alongside the graphical diagnostics and other normality measures.
 
-p-value for this test serve same function as the Shapiro–Wilk test.
+$p$-value for this test serve same function as the Shapiro–Wilk test.
 
 The **D’Agostino–Pearson omnibus test(`dagoTest()`)**, from the `fBasics` library, jointly evaluates skewness and kurtosis to assess whether the simulated sample means are consistent with a normal distribution. It combines the standardized skewness and kurtosis statistics:
 
@@ -763,7 +753,7 @@ which approximately follows a chi-square distribution with 2 degrees of freedom 
 
 Because the simulation contains 10,000 sample means, the test may detect small departures from normality, including slight skewness or tail differences. For some populations, the sampling distribution’s skewness and kurtosis may converge slowly—or not converge fully—to the normal benchmarks of 0 and 3, respectively. If these deviations remain within the predefined practical tolerances, the sampling distribution may still be treated as approximately normal for this investigation, if supported by other tests.
 
-p-value for this test serve same function as the Shapiro–Wilk test.
+$p$-value for this test serve same function as the Shapiro–Wilk test.
 
 ::: {.callout-warning appearance="simple"}
 ## Summary notes p-values
@@ -775,9 +765,9 @@ Because $R = `r format(R, big.mark = ",")`$, these tests have high statistical p
 
 ## All Statistics
 
-The table summarizes the selected minimum sample size, \(n\), for each population distribution. The selected value is the smallest tested \(n\) at which most or all test satisfied the practical tolerances specified in Section 2.3.
+The table summarizes the selected minimum sample size, $n$, for each population distribution. The selected value is the smallest tested $n$ at which most or all test satisfied the practical tolerances specified in Section 2.3.
 
-Dependent, highly skewed, and heavy-tailed populations often became approximately normal in the center while retaining noticeable deviations in the tails. Because tail convergence generally occurs more slowly than central convergence, the selected \(n\) was based on the combined evidence from the moment statistics, graphical diagnostics, and formal tests. When the tail-sensitive tests indicated departures but the remaining diagnostics supported approximate normality, the value of \(n\) was retained as a practical convergence point. Stricter tail tolerances would require a larger sample size. See the individual distribution sections for more detail discussion.
+Dependent, highly skewed, and heavy-tailed populations often became approximately normal in the center while retaining noticeable deviations in the tails. Because tail convergence generally occurs more slowly than central convergence, the selected $n$ was based on the combined evidence from the moment statistics, graphical diagnostics, and formal tests. When the tail-sensitive tests indicated departures but the remaining diagnostics supported approximate normality, the value of $n$ was retained as a practical convergence point. Stricter tail tolerances would require a larger sample size. See the individual distribution sections for more detail discussion.
 
 
 ```{r}
@@ -804,7 +794,7 @@ gt(dd) |>
 
 ### Description
 
-*The population distribution is already normal. A small sample size is expected to be sufficient to produce a normal sampling distribution.*
+The population distribution is already normal. A small sample size is expected for CLT.
 
 ```{r}
 #| label: fig-pop-normal
@@ -822,7 +812,7 @@ plot_population("normal")
 plot_convergence("normal")
 ```
 
-*For the normal population, all evaluated moment statistics were within the predefined tolerances beginning at \(n=1\). This is expected because n = 1 is equivalent to selecting the normal population. As \(n\) increased, the statistics remained stable and showed no evidence of divergence from the normal benchmarks.*
+For the normal population, all evaluated moment statistics were within the predefined tolerances starting at n=1. This is expected because n = 1 is equivalent to selecting the normal population. As n increased, the statistics remained stable and showed no evidence of divergence from the normal benchmarks.
 
 ### Histograms and Q–Q Plots
 
@@ -833,7 +823,7 @@ plot_convergence("normal")
 show_hist_qq("normal")
 ```
 
-*The histogram closely follows the fitted normal density curve. The observations also follow the Q–Q reference line, with only a few outliers at the extreme tails.*
+The histogram closely follows the fitted normal density curve. The observations also follow the Q–Q reference line, with only a few outliers at the extreme tails.
 
 ### Formal Test Results
 
@@ -843,7 +833,7 @@ show_hist_qq("normal")
 stats_table("normal")
 ```
 
-*All formal statistical tests produced statistic values within the tolerances specified in Section 2.3 and \(p\)-values greater than \(0.05\). Therefore, there was insufficient evidence to reject the null hypothesis of normality.*
+All tests produced statistic values within the tolerances specified in [Section 2.3](#statistical-tests). Also, $p$-values ≥ 0.05, and thus there was insufficient evidence to reject the null hypothesis of normality.
 
 ::: {.callout-note appearance="default"}
 ## Normal distribution: n = 1
@@ -853,7 +843,7 @@ stats_table("normal")
 
 ### Description
 
-*The population distribution is continuous and already symmetrical. A relatively low n is expected for convergence.*
+The population distribution is continuous and already symmetrical. A relatively low n is expected for convergence.
 
 ```{r}
 #| label: fig-pop-uniform
@@ -871,7 +861,7 @@ plot_population("uniform")
 plot_convergence("uniform")
 ```
 
-*Surprisingly, the moment statistics are within the tolerance of Section 2.3 as soon as n = 2, and they continue to converge and stabilize as n increases.*
+The moment statistics are within the tolerance as soon as n = 2, and they continue to stabilize as n increases.
 
 ### Histograms and Q–Q Plots
 
@@ -882,7 +872,7 @@ plot_convergence("uniform")
 show_hist_qq("uniform")
 ```
 
-*At \(n=2\), the histogram is broadly consistent with the fitted normal curve, although the Q–Q plot still shows noticeable curvature away from the reference line. By \(n=7\), the Q–Q points follow the reference line more closely, indicating improved agreement with normality.*
+At n=2, the Q–Q plot still shows noticeable curvature away from the reference line. By 7 < n < 10, the Q–Q points follow the reference line more closely, a better agreement with normality, minus the slight deviation at the very right tail end.
 
 ### Formal Test Results
 
@@ -892,7 +882,7 @@ show_hist_qq("uniform")
 stats_table("uniform")
 ```
 
-*All formal statistics satisfied the specified criteria starting at n = 7, which is a reasonable number of sampling points. As a result, n = 7 was chosen instead of the more liberal value of n = 2. If there are barriers to sampling 7 data points, n = 2 could reasonably be used for exploratory approximation.*
+All test results satisfied the tolerance criteria starting at n = 7, which is a reasonable number of sampling points. As a result, n = 7 was chosen instead of the more liberal value of n = 2. If there are barriers to sampling 7 data points, smaller n could reasonably be used for exploratory approximation.
 
 ::: {.callout-note appearance="default"}
 ## Uniform distribution: n = 7
@@ -903,7 +893,7 @@ stats_table("uniform")
 
 ### Description
 
-*The population distribution is highly discrete. A moderate sample size n is expected for the CLT.*
+The population distribution is very discrete but symmetrical. A small to moderate sample size n is expected for the CLT.
 
 ```{r}
 #| label: fig-pop-die
@@ -921,7 +911,7 @@ plot_population("die")
 plot_convergence("die")
 ```
 
-*Similar to the Uniform distribution, the moment statistics are, surprisingly, within the tolerance of Section 2.3 as soon as n = 2, and they continue to converge and stabilize as n increases.*
+Similar to the Uniform distribution, the moment statistics are within the tolerance as soon as n = 2, and they continue to converge and stabilize as n increases.
 
 ### Histograms and Q–Q Plots
 
@@ -932,9 +922,9 @@ plot_convergence("die")
 show_hist_qq("die")
 ```
 
-*The histograms generally followed the fitted normal curve. However, the bars did not completely smooth into a bell-shaped curve at larger \(n\). This may reflect the default histogram binning and the discrete nature of the underlying distribution rather than a substantial departure from normality.*
+At n = 2, the histogram show higher extreme values at the left end. The histogram are more encompassed within the normal distribution curve at n = 4. However, the histograms do not completely smooth into a bell-shaped curve with increasing n. This may reflect the default histogram binning and/or the discrete nature of the underlying distribution rather than a evidence against from normality.
 
-*The Q–Q plots also showed a small staircase pattern caused by the discrete sample means. As \(n\) increased, the points generally moved closer to the normal reference line. For \(n \ll 12\), noticeable deviations remained, including near the center of the distribution.*
+The Q–Q plots also showed a staircase pattern of the discrete distribution. At n = 2, the points are noticeably differ from the normal line. As n increased, beginning with n = 4, the staircases are more granular and stay along the normal line.
 
 ### Formal Test Results
 
@@ -944,11 +934,13 @@ show_hist_qq("die")
 stats_table("die")
 ```
 
-*The Shapiro–Wilk \(W\)-statistic exceeded the tolerance of \(0.99\) beginning at \(n=4\). The D’Agostino–Pearson chi-square statistic remained below the \(95\%\) critical value of \(5.991\) beginning at \(n=12\). Although the Anderson–Darling \(A\)-statistic remained above the practical threshold of \(1\), even at \(n=50\), this indicates residual tail deviations rather than substantial non-normality in the center. Since the other diagnostics supported approximate normality by \(n=12\), \(n=12\) was selected as the practical convergence point.*
+The Shapiro–Wilk $W$-statistic exceeded the tolerance of 0.99 beginning at n=4. The D’Agostino–Pearson chi-square statistic remained below the critical value of 5.991 beginning at n=12.
 
-*For all of the former tests, the \(p\)-values are below the 0.05 threshold required to retain the null hypothesis. However, since R = 10,000 is relatively large, the \(p\)-values were ignored because all other statistics support the normality assumption.*
+The Anderson–Darling $A$-statistic seems relatively high, even at n=50, this indicates residual tail deviations rather than substantial non-normality. Since the other tests supported approximate normality by n = 12, this n was selected as the practical convergence point. n as low as 4 also seems reasonable assumption.
 
-**Comparison to hypothesis:** *Convergence was relatively fast, unlike the original prediction.*
+For all of the tests, the $p$-values are below the 0.05 threshold required to not reject the null hypothesis. However, $p$-values are more sensitive to small, not-significant deviation at large R, this result was ignored since all other statistics support the normality assumption.
+
+**Comparison to hypothesis:** Convergence was much faster than original prediction.
 
 ::: {.callout-note appearance="default"}
 ## Six-sided die distribution: n = 12
@@ -958,7 +950,7 @@ stats_table("die")
 
 ### Description
 
-*The population distribution is highly skewed. A moderate n is expected to satisfy the CLT.*
+The population distribution is highly skewed. A moderate n is expected for CLT.
 
 ```{r}
 #| label: fig-pop-exponential
@@ -976,7 +968,7 @@ plot_population("exponential")
 plot_convergence("exponential")
 ```
 
-*Skewness and kurtosis are within their tolerances of 0.5 and 1, respectively, at n = 16. The sample mean and standard deviation are also within 0.1 of their theoretical values.*
+Skewness and kurtosis are within their tolerances at n = 14. The sample mean and standard deviation are also within 0.1 of their theoretical values. The skewness of the original population results in higher sampling points to "normalize" the distribution of the sample means.
 
 ### Histograms and Q–Q Plots
 
@@ -987,7 +979,7 @@ plot_convergence("exponential")
 show_hist_qq("exponential")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+n = 14 still shows an noticeable upward curvature from the normal Q-Q line, indicating left skewness. Conforming to the normal line occurs around n ~ 32 for most of the central quantiles. The tail ends do not start to align with the normal line until n ~ 100.
 
 ### Formal Test Results
 
@@ -997,15 +989,19 @@ show_hist_qq("exponential")
 stats_table("exponential")
 ```
 
+$W$ statistic is within tolerance at n = 24. $D$ statistic are relatively small as well, showing a maximum of <1% difference in the CDF between the sampling distribution and a normal distribution at a given point. $A$ and $𐤕^2$ are both large, supporting the tail-end deviation shown from the Q-Q plot. Both, especially $𐤕^2$, remain above tolerance at n -> 1000.
+
+Since the center of the distribution is relatively "normal" visually, supported by both the $W$ and $D$ statistic tolerance, at n = 32. This value is chosen during this investigation. Higher sample points may be required for more conservative application.
+
 ::: {.callout-note appearance="default"}
-## Exponential distribution: n = 23
+## Exponential distribution: n = 32, the higher n value, which supports normality for most of the numerical and graphical tests.
 :::
 
 ## Poisson(1)
 
 ### Description
 
-*The population distribution is discrete and heavily skewed. A moderate to high n is expected for the CLT.*
+The population distribution is discrete and skewed. A moderate to high n, similar to exponential distribution, is expected for the CLT.
 
 ```{r}
 #| label: fig-pop-poisson
@@ -1023,7 +1019,7 @@ plot_population("poisson")
 plot_convergence("poisson")
 ```
 
-*The moment statistics are already within tolerance starting at n = 4. There is some noise at very high n, but the values are stable and converging to their tolerances.*
+The moment statistics are already within tolerance starting at n = 4. There is some noise at very high n, but the values are stable and converging to their tolerances.
 
 ### Histograms and Q–Q Plots
 
@@ -1034,9 +1030,9 @@ plot_convergence("poisson")
 show_hist_qq("poisson")
 ```
 
-*A discrete distribution is a little more difficult to judge. The histograms are relatively close to the normal curve but do not smooth out until very high n.*
+The histograms are relatively close to the normal curve but do not smooth out until very high n, similar to the discrete six-sided die distribution.
 
-*The Q–Q plot shows left-tail divergence at n < 18. For 18 < n < 30, the left tail starts converging to the normal straight line, but the right tail starts to diverge. Visually, the data points follow the straight line relatively well around n = 27.*
+The Q–Q plot shows left-tail divergence at n < 13. As n increase, the left tail starts converging to the normal straight line, but the right tail starts fluctuate away from the normal line. Visually, the data points follow the straight line relatively well around n ~ 18. The tails do fluctuate and/or converging slowly until n > 30.
 
 ### Formal Test Results
 
@@ -1046,19 +1042,21 @@ show_hist_qq("poisson")
 stats_table("poisson")
 ```
 
-*The Shapiro–Wilk W statistic is within the tolerance at n = 15, suggesting that most of the data follow the normal expectation. The D statistic of the K–S test is approximately 0, indicating a maximum difference of less than 1% in the CDF between the sampling distribution and the normal distribution at any single point.*
+The Shapiro–Wilk W statistic is within the tolerance at n = 15, suggesting that most of the data follow the normal expectation. The D statistic of the K–S test is approximately 0, indicating a maximum difference of < 1% in the CDF between the sampling distribution and the normal distribution at any single point.
 
-*The D’Agostino–Pearson chi-square statistic and Anderson–Darling \(A\)-statistic remained substantially high even at n=500, which indicates residual tail deviations rather than non-normality in the center.*
+The $X^2$ statistic and $A$-statistic remained substantially high until n > 400, which indicates residual tail deviations rather than non-normality in the center. This is consistent with the exponential distribution that skewed population require much higher sample points for the tails to converge. However, this distribution does seem to approach normal distribution slightly faster than the exponential distribution.
+
+n ~ 30 is selected since the center of the data is approximate normal, supported by the moment, graphical, Shapiro–Wilk, and K-S test. Higher n may be needed for conservative application and if the extreme ends are important.
 
 ::: {.callout-note appearance="default"}
-## Exponential distribution: n = 27, the higher n value, which supports normality for most of the numerical and graphical tests.
+## Poisson distribution: n = 30, the higher n value, which supports normality for most of the numerical and graphical tests.
 :::
 
 ## Small Binomial(5, 0.10)
 
 ### Description
 
-*The distribution is discrete and skewed. A moderate n is expected for the CLT.*
+The distribution is discrete and skewed. A moderate to high n is expected for the CLT.
 
 ```{r}
 #| label: fig-pop-binomial-small
@@ -1076,7 +1074,7 @@ plot_population("binomial_small")
 plot_convergence("binomial_small")
 ```
 
-*The moment statistics are within tolerance at n = 6.*
+The moment statistics are within tolerance at n = 6.
 
 ### Histograms and Q–Q Plots
 
@@ -1087,7 +1085,7 @@ plot_convergence("binomial_small")
 show_hist_qq("binomial_small")
 ```
 
-*The Q–Q plot shows tail deviations alternating back and forth until n = 50.*
+The histogram do not smooth out to the normal curve, similar to the other discrete distributions. From the Q-Q plot, data deviate from normal distribution at the two tail ends, alternatively (i.e., right end deviates at n = 24, left end deviates at n = 25, right end deviates at n = 26, etc.). The tail ends relatively stabilize at around n ~ 30.
 
 ### Formal Test Results
 
@@ -1097,17 +1095,19 @@ show_hist_qq("binomial_small")
 stats_table("binomial_small")
 ```
 
-*The Shapiro–Wilk W value is within tolerance at n = 27. The D statistic is also approximately 0 at this n, showing a close match with the normal distribution CDF. The A and χ² statistics do not reach tolerance until n = 500, demonstrating substantial tail divergence, as seen in the graphical tests.*
+The $W$ value is within tolerance at n = 27. The D statistic is also approximately 0 at this n, showing a close match with the normal distribution CDF. The A and χ² statistics do not reach tolerance until n > 400, demonstrating substantial tail divergence, as seen in the graphical tests.
+
+Since the center of the data is approximate normal by n ~ 30, despite the deviation at the etreme end points, this n is chosen for this distribution.
 
 ::: {.callout-note appearance="default"}
-## Binomial small distribution: n = 50, based on the graphical tests. A smaller n of about 30 could be used with a more liberal tolerance.
+## Binomial small distribution: n = 30, supported by moments, graphical, Shapiro-Wilk, and KS Test.
 :::
 
 ## Large Binomial(20, 0.50)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+Distribution is symmetrical and seemingly normal. Similar to the die distribution, expect low n for CLT.
 
 ```{r}
 #| label: fig-pop-binomial-large
@@ -1125,7 +1125,7 @@ plot_population("binomial_large")
 plot_convergence("binomial_large")
 ```
 
-*The moment statistics are within tolerance at n = 1.*
+The moment statistics are within tolerance at n = 1.
 
 ### Histograms and Q–Q Plots
 
@@ -1136,7 +1136,7 @@ plot_convergence("binomial_large")
 show_hist_qq("binomial_large")
 ```
 
-*At n = 1, the Q–Q plot still shows noticeable deviation from the normal line. At n = 2, the match is much closer.*
+At n = 1, the Q–Q plot still shows noticeable deviation from the normal line. At n = 2, the match is much closer.
 
 ### Formal Test Results
 
@@ -1146,7 +1146,7 @@ show_hist_qq("binomial_large")
 stats_table("binomial_large")
 ```
 
-*The W, D, and χ² statistics are all within tolerance at n = 2. The A statistic is relatively high, probably due to the tail behavior. Since all other tests support normality at the center of the data, n = 2 was chosen.*
+The W, D, and χ² statistics are all within tolerance at n = 2. The A statistic is relatively high, probably due to the tail behavior. Since all other tests support normality, n = 2 was chosen.
 
 ::: {.callout-note appearance="default"}
 ## Binomial large distribution: n = 2
@@ -1156,7 +1156,7 @@ stats_table("binomial_large")
 
 ### Description
 
-*The distribution does not have a finite mean or variance, so the CLT is expected to fail.*
+The distribution does not have a finite mean or variance, so the CLT is expected to fail.
 
 ```{r}
 #| label: fig-pop-cauchy
@@ -1174,7 +1174,19 @@ plot_population("cauchy")
 plot_convergence("cauchy")
 ```
 
-*All graphs show that the mean, skewness, kurtosis, and SE are not converging to their tolerances, demonstrating that the sampling distribution is not normal for any n.*
+All graphs show that the mean, skewness, kurtosis, and SE are not converging to their tolerances, demonstrating that the sampling distribution is not normal for any n. This makes sense since the population distribution does not have a finite mean or variance, it's expected that the sampling distribution would not as well.
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-cauchy
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("cauchy")
+```
+
+The Q-Q plot shows very extreme tails.
+
 
 ### Formal Test Results
 
@@ -1184,17 +1196,18 @@ plot_convergence("cauchy")
 stats_table("cauchy")
 ```
 
-*All formal normality statistics are significantly lower and/or higher than their tolerances, demonstrating significant deviation from normality.*
+All formal normality statistics are significantly lower and/or higher than their tolerances, further supporting non-normality.
 
 ::: {.callout-note appearance="default"}
-## Cauchy: n = none. All tests point to the conclusion that the sampling distribution of the sample mean never becomes normal for the Cauchy distribution. The Cauchy distribution violates the CLT assumption of a finite mean and variance.
+## Cauchy: n = none. All tests point to the conclusion that the sampling distribution of the sample mean never becomes normal for the Cauchy distribution. The Cauchy distribution violates the CLT assumption of having a finite mean and variance.
 :::
 
 ## Age at death (bimodal)
 
 ### Description
+2 distributions, exponential representing infant death rate and normal distribution representing adult death rate, are combined to form this bimodal distribution.
 
-*The distribution has two peaks. A moderate or high n is expected for the CLT.*
+The distribution has two peaks but does have finite mean and standard deviation. The left side of the distribution is skewed. As a result, a moderate or high n is expected for the CLT.
 
 ```{r}
 #| label: fig-pop-rdeath
@@ -1212,7 +1225,7 @@ plot_population("rdeath")
 plot_convergence("rdeath")
 ```
 
-*Skewness and kurtosis are within tolerance at n = 4. The mean and SD are within 1% of their theoretical values.*
+Skewness and kurtosis are within tolerance at n = 4. The mean and SD are within 1% of their theoretical values.
 
 ### Histograms and Q–Q Plots
 
@@ -1223,7 +1236,7 @@ plot_convergence("rdeath")
 show_hist_qq("rdeath")
 ```
 
-*There is a very heavy right-tail deviation at n = 4. The center of the Q–Q plot follows the normal line more closely starting around n = 20.*
+There is a very heavy right-tail deviation at n = 4. The center of the Q–Q plot follows the normal line more closely starting around n = 20.
 
 ### Formal Test Results
 
@@ -1233,29 +1246,21 @@ show_hist_qq("rdeath")
 stats_table("rdeath")
 ```
 
-*The W statistic is within tolerance at n = 7. The D statistic is approximately 0 as well. The A and χ² statistics are within practical tolerance around n = 200; the tails take longer to converge.*
+The W statistic is within tolerance at n = 7. The D statistic is approximately 0 as well. The A and χ² statistics are within practical tolerance around n = 200. The tails take longer to converge due to the skewness of the left end of the population distribution, but the convergence is much earlier than the Poisson or Exponential distributions.
+
+Applying similar logic, since data is visually following the normal distribution, and supported by two of the normality tests, n = 20 is selected.
 
 ::: {.callout-note appearance="default"}
-## Death distribution: n = 20, based on the graphical tests.
+## Death distribution: n = 20
 :::
 
 ## Machine failure (dependent)
 
 ### Description
 
-*Each machine's operating time is exponential, but its rate depends on the previous operating time: $X_1 \sim \text{Exp}(1)$ and $X_t \sim \text{Exp}\big(\lambda_t = e^{1.25(X_{t-1}-1)}\big)$. The observations are therefore **not independent**, which violates the classical CLT assumption.*
+Each machine's operating time is exponential, but its rate depends on the previous operating time: $X_1 \sim \text{Exp}(1)$ and $X_t \sim \text{Exp}\big(\lambda_t = e^{1.25(X_{t-1}-1)}\big)$. The observations are therefore **not independent**, which violates the classical CLT assumption.
 
-**Prediction before running.**
-
-*The classical CLT requires independence, but versions of the CLT exist for dependent data. They require (1) short memory, meaning the dependence dies off quickly (for example geometric ergodicity or mixing), (2) finite variance, and (3) stationarity or convergence to a stationary distribution. Long-memory processes, where autocorrelations decay slowly (Hurst exponent $H > 0.5$), fail these conditions because the SD of the sample mean shrinks more slowly than $1/\sqrt{n}$.*
-
-*This process is expected to satisfy all three conditions:*
-
-- ***Finite variance and light tails.** For $x \ge 0$, the rate is at least $e^{-1.25} \approx 0.29$, so every operating time is stochastically dominated by an Exponential(0.29) variable. All moments are therefore finite, unlike the Cauchy case.*
-- ***Short memory.** A long operating time produces a very large next rate and hence a very short next time, and vice versa. The chain forgets its past quickly, so the dependence should decay geometrically.*
-- ***Negative dependence.** The same feedback (long time, then short time) suggests a clearly negative lag-1 autocorrelation.*
-
-*Prediction: the CLT should still hold, so the sampling distribution of the mean should become approximately normal. The usual standard error $\sigma/\sqrt{n}$ should not be correct, however.*
+Since assumption of CLT is violated, expect similar behavior as Cauchy distribution and sampling distribution is not converging to normal.
 
 ```{r}
 #| label: fig-pop-rdependent
@@ -1273,20 +1278,7 @@ plot_population("rdependent")
 plot_convergence("rdependent")
 ```
 
-**How the dependence changes the standard error.** *For dependent data the CLT variance is the asymptotic variance, not $\sigma^2$:*
-
-$$
-\sigma^2_{\text{as}} = \gamma_0 + 2\sum_{k=1}^{\infty}\gamma_k, \qquad \text{SD}(\bar{X}_n) \approx \frac{\sigma_{\text{as}}}{\sqrt{n}},
-$$
-
-*where $\gamma_k$ is the lag-$k$ autocovariance. If the lag-1 autocorrelation is negative, as predicted, then $\sigma^2_{\text{as}} < \sigma^2$. The sample mean is then more concentrated than an independent sample of the same size, and the effective sample size exceeds $n$. In the Standard error panel above, the simulated SE should therefore fall **below** the "Theory $\sigma/\sqrt{n}$" line, which assumes independence. A gap between the two lines is evidence of dependence, not of a failed CLT. A useful check is to plot $n \cdot \text{Var}(\bar{X}_n)$ against $n$: if the CLT variance holds, it should level off at $\sigma^2_{\text{as}}$.*
-
-**Two other effects to expect.**
-
-- ***Start-up bias at small n.** Every replicate starts at $X_1 \sim \text{Exp}(1)$, which is not the stationary distribution of the chain. The mean of $\bar{X}_n$ is therefore biased for small $n$, and the bias should fade as $n$ grows.*
-- ***Skewness persists at small n.** The marginal distribution is still right-skewed, so very small $n$ should look non-normal. The skewness of the mean should shrink roughly like $1/\sqrt{n_{\text{eff}}}$, and negative dependence should help it converge faster than for an independent Exponential(1).*
-
-*These are predictions from theory. The values at which skewness and kurtosis enter the tolerance bands should be read from the figure above.*
+Kurtosis is within tolerance at n - 27. Skewness is within tolerance at n = 66. At n = 66, the median is within 0.5 of the mean and the standard deviation is within 0.5 of the theoretical standard error as well.
 
 ### Histograms and Q–Q Plots
 
@@ -1297,7 +1289,7 @@ $$
 show_hist_qq("rdependent")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+Q-Q plot show the distribution data is slowly converging toward the normal line. Close approximate occured around n ~ 190. The right tail end takes a while longer (n ~ 400) to stabilize on the Q-Q line.
 
 ### Formal Test Results
 
@@ -1307,22 +1299,31 @@ show_hist_qq("rdependent")
 stats_table("rdependent")
 ```
 
+$W$ statistic reaches tolerance at n = 91. $A$ and $X^2$ remain extremely high as n -> 500.
+
+**Discussion**
+The classical CLT requires independence, but versions of the CLT exist for dependent data. They require (1) short memory, meaning the dependence dies off quickly, (2) finite variance, and (3) stationary or convergence to a stationary distribution. Long-memory processes, where auto correlations decay slowly (Hurst exponent $H > 0.5$), fail these conditions because the SD of the sample mean shrinks more slowly than $1/\sqrt{n}$.*
+
+This process is expected to satisfy all three conditions:
+
+- ***Finite variance and light tails.** For $x \ge 0$, the rate is at least $e^{-1.25} \approx 0.29$, so every operating time is stochastically dominated by an Exponential(0.29) variable. All moments are therefore finite, unlike the Cauchy case.*
+- ***Short memory.** A long operating time produces a very large next rate and hence a very short next time, and vice versa. The chain forgets its past quickly, so the dependence should decay geometrically.*
+- ***Negative dependence.** The same feedback (long time, then short time) suggests a clearly negative lag-1 autocorrelation.*
+
+The CLT hold and the sampling distribution of the mean should become approximately normal, but at a very large n.
+
+The exact n is a little unsure. The moment and the Shapiro and KS-test all point to a smaller n, relative to the visual Q-Q visual test. Future improvement could consider adding metrics to measure how much deviation from the Q-Q plot line is the distribution data. For current analysis, the more conservative n = 191 was chosen from the graphical visual.
+
+::: {.callout-note appearance="default"}
+## Dependent machine failure distribution: n = 191 from graphical test.
+:::
 
 
 ## Basketball shots (non-identical)
 
 ### Description
 
-*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are non-identically distributed.*
-
-*The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
-
-- *Mean $\mu = \sum p_i = 14$ shots.*
-- *Variance $\sigma^2 = \sum p_i(1-p_i) \approx 3.905$, so $\sigma \approx 1.976$*
-- *Skewness $\approx -0.17$ and excess kurtosis $\approx -0.06$. A single game is close to normal, with a slight left skew*
-
-*Because the game totals are iid with finite variance, the classical CLT applies directly and the expected behavior is close to the Large Binomial(20, 0.50) case:*
-
+One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are non-identically distributed.
 
 ```{r}
 #| label: fig-pop-rnonidentical
@@ -1340,7 +1341,7 @@ plot_population("rnonidentical")
 plot_convergence("rnonidentical")
 ```
 
-*Moment statistics are within the tolerance, even at small n*
+Moment statistics are within the tolerance, even at small n
 
 ### Histograms and Q–Q Plots
 
@@ -1351,7 +1352,7 @@ plot_convergence("rnonidentical")
 show_hist_qq("rnonidentical")
 ```
 
-*At low n, the discrete data points are still noticably deviated from the normal line. Data start to converge around n = 10.*
+At low n, the discrete data points are noticeably deviated from the normal line. Data start to converge around n = 10.
 
 ### Formal Test Results
 
@@ -1361,15 +1362,24 @@ show_hist_qq("rnonidentical")
 stats_table("rnonidentical")
 ```
 
-*W statistic is within tolerance at n = 3. The Chi square statistic is within tolerance at n = 10*
+W statistic is within tolerance at n = 3. The Chi square statistic is within tolerance at n = 10
 
-**Contrast with a genuinely non-identical average.** *If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.*
+**Discussion**
+The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
+
+- *Mean $\mu = \sum p_i = 14$ shots.*
+- *Variance $\sigma^2 = \sum p_i(1-p_i) \approx 3.905$, so $\sigma \approx 1.976$*
+- *Skewness $\approx -0.17$ and excess kurtosis $\approx -0.06$. A single game is close to normal, with a slight left skew*
+
+Because the game totals are iid with finite variance, the classical CLT applies directly and the expected behavior is close to the Large Binomial(20, 0.50) case:
+
+*Contrast with a genuinely non-identical average.* If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.
 
 ::: {.callout-note appearance="default"}
-## Basketball shots (non-identical): n = 10
+## Basketball shots (non-identical): n = 10 from the graphical and X^2 test
 :::
 
-# Discussion
+# Conclusion
 
 ## Is n = 30 a Universal Rule?
 
@@ -1377,7 +1387,7 @@ The value for n depends on the population distribution. However, I was surprised
 
 ## Limitations
 
-Some conditions of the classical Central Limit Theorem are more fundamental than others. In particular, the population must have a well-defined finite mean and finite variance. The Cauchy distribution violates these conditions: its mean is undefined and its variance is not finite. Consequently, the sample mean does not stabilize around a population mean and its sampling distribution does not converge to a normal distribution as \(n\) increases.
+Some conditions of the classical Central Limit Theorem are more fundamental than others. In particular, the population must have a well-defined finite mean and finite variance. The Cauchy distribution violates these conditions: its mean is undefined and its variance is not finite. Consequently, the sample mean does not stabilize around a population mean and its sampling distribution does not converge to a normal distribution as $n$ increases.
 
 Independence and identical distribution are also assumptions of the classical i.i.d. CLT, but they can be relaxed under more advanced versions of the theorem. For example, normal convergence may still occur when observations are weakly dependent or not identically distributed, provided additional conditions control the dependence structure and the contribution of individual observations. Violating them may change the rate of convergence or prevent convergence to a normal distribution, depending on the specific model.
 
@@ -1391,8 +1401,8 @@ Independence and identical distribution are also assumptions of the classical i.
 #| results: asis
 #| echo: false
 fence <- strrep("`", 3)
-script_files <- c("setup.R", file.path("scripts", c("config.R", "distributions.R",
-                  "distribution_generators.R", "main.R")))
+script_files <- c("setup.R", file.path("scripts", c("config.R", "distribution_generators.R", "distributions.R",
+                  , "main.R")))
 script_files <- script_files[file.exists(script_files)]
 for (f in script_files) {
   cat("\n::: {.callout-note collapse=\"true\"}\n## ", f, "\n\n", sep = "")
@@ -1444,8 +1454,6 @@ knitr::include_graphics("images/AI-Prompt-Dependent-Distribution-2.jpg")
 
 ## Sources
 
-*Check each entry against your own sources before submitting.*
-
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC3591587/
 - https://statisticsfundamentals.com/descriptive-statistics/skewness-and-kurtosis/
 - https://statisticsfundamentals.com/tables/anderson-darling-table/
@@ -1455,4 +1463,17 @@ knitr::include_graphics("images/AI-Prompt-Dependent-Distribution-2.jpg")
 - https://www.statology.org/central-limit-theorem-conditions/
 - http://www.ledoit.net/TimCrack_CLT_Dependent_JFEduc_2010.pdf
 - https://link.springer.com/chapter/10.1007/978-0-387-75971-5_9
+- https://www.youtube.com/watch?v=HD_5oWP2cf0&t=25s
+- https://statisticsbyjim.com/graphs/qq-plot/#google_vignette
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC3693611/
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC3693611/
+- https://vrcacademy.com/tutorials/cauchy-distribution/
+- https://link.springer.com/chapter/10.1007/978-0-387-75971-5_9
+
+## Future improvements
+- Adding metrics to more objectively judge the Q-Q plot
+- Adding citations. However, all sources are listed in the appendix.
+
+
+
 

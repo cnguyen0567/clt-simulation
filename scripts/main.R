@@ -269,12 +269,12 @@ run_simulation <- function(
 # Run every distribution -------------------------------------------------------
 all_stats <- list()
 run_distributions <- c(
-  dist_nonidentical,
-  dist_dependent
+  dist_nonidentical
 )
 
 n <- c(
-  seq(1, 100, by = 1),        #Num of sample size needed to satisfy CLT
+  seq(1, 30, by = 1) ,      #Num of sample size needed to satisfy CLT
+  seq(40, 100, by = 10)
   ) 
 
 for (distribution_name in names(run_distributions)) {
