@@ -1,6 +1,6 @@
 ---
 title: "When Does the Central Limit Theorem Work?"
-subtitle: "A Monte Carlo investigation of twelve probability distributions to examine the sampling distribution of the mean and estimate the sample size at which it becomes approximately normal."
+subtitle: "A Monte Carlo investigation of eleven probability distributions to examine the sampling distribution of the mean and estimate the sample size at which it becomes approximately normal."
 author:
   - name: "Chau Nguyen"
 date: today
@@ -47,7 +47,8 @@ gens <- tryCatch({
   source("scripts/config.R")
   source("scripts/distributions.R")
   c(dist_normal, dist_uniform, dist_die, dist_exponential,
-    dist_poisson, dist_binom_small, dist_binom_large, dist_cauchy, dist_death)
+    dist_poisson, dist_binom_small, dist_binom_large, dist_cauchy, dist_death,
+    dist_dependent, dist_nonidentical)
 }, error = function(e) {
   message("Could not load scripts/: ", conditionMessage(e))
   list()
@@ -73,7 +74,9 @@ meta <- data.frame(
            "binomial_small",
            "binomial_large",
            "cauchy",
-           "rdeath"                       # name used by dist_death in distributions.R
+           "rdeath",                      # name used by dist_death in distributions.R
+           "rdependent",                  # name used by dist_dependent
+           "rnonidentical"                # name used by dist_nonidentical
            ),
   label = c("Normal(0, 1)",
             "Uniform(0, 1)",
@@ -83,7 +86,9 @@ meta <- data.frame(
             "Small Binomial(5, 0.10)",
             "Large Binomial(20, 0.50)",
             "Cauchy(0, 1)",
-            "Age at death (bimodal)"
+            "Age at death (bimodal)",
+            "Machine failure (dependent)",
+            "Basketball shots (non-identical)"
             ),
   params = c("\u03bc = 0, \u03c3 = 1",
              "a = 0, b = 1",
@@ -93,7 +98,9 @@ meta <- data.frame(
              "size = 5, p = 0.10",
              "size = 20, p = 0.50",
              "location = 0, scale = 1",
-             "Ages 0\u2013100; exponential decay (rate 1/5) plus a normal bump centred at 65 (SD 10)"
+             "Ages 0\u2013100; exponential decay (rate 1/5) plus a normal bump centred at 65 (SD 10)",
+             "Exponential times; each rate depends on the previous time: \u03bb\u209c = exp(1.25 (X\u209c\u208b\u2081 \u2212 1)), \u03bb\u2081 = 1",
+             "Shots made in a 20-shot game; p falls linearly from 0.90 (shot 1) to 0.50 (shot 20)"
              ),
   gen = c("rnorm(n, 0, 1)",
           "runif(n, 0, 1)",
@@ -103,7 +110,9 @@ meta <- data.frame(
           "rbinom(n, size = 5, prob = 0.10)",
           "rbinom(n, size = 20, prob = 0.50)",
           "rcauchy(n, location = 0, scale = 1)",
-          "sample(0:100, n, replace = TRUE, prob = death_distribution$probability)"
+          "sample(0:100, n, replace = TRUE, prob = death_distribution$probability)",
+          "rexp(1, rate = exp(1.25 * (x[t - 1] - 1))), one time after another",
+          "colSums(matrix(rbinom(n * 20, 1, prob = rep(p, n)), nrow = 20))"
           ),
   trait = c("Normal",
             "Bounded, symmetric, non-normal",
@@ -113,9 +122,11 @@ meta <- data.frame(
             "Discrete, strongly right skewed",
             "Discrete, symmetric",
             "Heavy-tailed, no finite mean or variance",
-            "Bimodal, discrete"
+            "Bimodal, discrete",
+            "Dependent observations, right skewed",
+            "Non-identical Bernoulli trials, discrete"
             ),
-  discrete = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE),
+  discrete = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, FALSE, TRUE),
   stringsAsFactors = FALSE
 )
 
@@ -124,6 +135,18 @@ files <- list.files(results_dir, pattern = "^stats_results_.*\\.csv$", full.name
 stopifnot("No stats_results_*.csv files found in results/. Run scripts/main.R first." = length(files) > 0)
 res <- do.call(rbind, lapply(files, function(f) {
   d <- read.csv(f)
+  # Every statistic must be numeric. If a file has text in a column (e.g. a stray header
+  # row or a hand-edited cell), say which file, coerce to numeric and drop unusable rows.
+  num <- setdiff(names(d), "dist")
+  bad <- num[!vapply(d[num], is.numeric, logical(1))]
+  if (length(bad)) {
+    message(basename(f), ": non-numeric column(s) ", paste(bad, collapse = ", "),
+            " (e.g. '", paste(head(unique(unlist(lapply(d[bad], as.character))), 3), collapse = "', '"),
+            "'). Coercing to numeric; check this file.")
+    d[bad] <- lapply(d[bad], function(v) suppressWarnings(as.numeric(as.character(v))))
+  }
+  if (!"n" %in% names(d)) stop(basename(f), " has no 'n' column")
+  d <- d[!is.na(d$n), , drop = FALSE]
   d$dist <- sub("^stats_results_(.*)\\.csv$", "\\1", basename(f))
   d
 }))
@@ -151,6 +174,9 @@ exact <- list(normal = c(0, 1), uniform = c(0.5, sqrt(1 / 12)), die = c(3.5, sqr
               binomial_small = c(0.5, sqrt(5 * 0.10 * 0.90)),
               binomial_large = c(10, sqrt(20 * 0.50 * 0.50)),
               cauchy = c(NA_real_, NA_real_))               # no finite mean or variance
+pp <- seq(0.90, 0.50, length.out = 20)                      # shot probabilities used by dist_nonidentical
+exact$rnonidentical <- c(sum(pp), sqrt(sum(pp * (1 - pp))))   # mean and SD of shots made per game
+# rdependent has no closed form: its mean and SD are simulated (falls back to pop_draws)
 if (exists("death_distribution")) {                         # exact moments of the age-at-death pmf
   mu_d <- sum(death_distribution$age * death_distribution$probability)
   exact$rdeath <- c(mu_d, sqrt(sum((death_distribution$age - mu_d)^2 * death_distribution$probability)))
@@ -191,17 +217,20 @@ style_gt <- function(g, size = 13) {
                 table.width = pct(100),
                 data_row.padding = px(4)) |>
     tab_style(style = cell_text(color = "white", weight = "bold"),
-              locations = cells_column_labels())
+              locations = list(cells_column_labels(), cells_column_spanners()))
 }
 
 # p-values as text so very small values never break a table
 fmt_p <- function(p) ifelse(is.na(p), "—", ifelse(p < 0.001, "<0.001", sprintf("%.3f", p)))
 p_cols <- c("SW_p", "Lillie_p", "AD_p", "DP_p")
+stat_cols <- c("SW_W", "Lillie_D", "AD_A", "DP_Chi2")   # test statistics (used in the all-statistics table)
 
 col_labels <- c(label = "Distribution", n = "n", Mean = "Mean", Median = "Median",
                 SD = "SD (sim. SE)", Skewness = "Skew", Z_s = "Z skew",
                 Kurtosis = "Kurt", Z_k = "Z kurt", SW_p = "Shapiro p",
                 Lillie_p = "Lilliefors p", AD_p = "A–D p", DP_p = "D'Ag.–P. p",
+                SW_W = "Shapiro–Wilk W", Lillie_D = "Lilliefors D", AD_A = "Anderson–Darling A",
+                DP_Chi2 = "D'Ag.–P. χ²",
                 Ok = "Normal enough?")
 
 # ---- Choose which n to show in each distribution's histogram/Q-Q/table -------
@@ -210,8 +239,42 @@ pick_n <- function(d) {
   if (length(ns) <= 4) return(ns)
   sort(unique(c(min(ns), ns[which.min(abs(ns - 30))], ns[ceiling(length(ns) / 2)], max(ns))))
 }
-n_show <- list()   # override per distribution, e.g. n_show$exponential <- c(1, 10, 30, 100)
-get_n  <- function(d) if (!is.null(n_show[[d]])) n_show[[d]] else pick_n(d)
+
+# ==== EDIT HERE: which n to display for each distribution ======================
+# Two separate lists:
+#   n_show_plot  -> n values for the histogram + Q-Q figures
+#   n_show_table -> n values for the "Formal Test Results" table
+# Each entry must be an n that was simulated in main.R (figures only exist for those n).
+# The first value is the chosen (smallest) n; the others are placeholders to replace.
+# A distribution left out of a list falls back to the default pick_n() selection.
+n_show_plot <- list(
+  normal         = c(1),
+  uniform        = c(7),
+  die            = c(2, 4, 12, 30, 34),
+  exponential    = c(23),
+  poisson        = c(15),
+  binomial_small = c(10, 27, 500),
+  binomial_large = c(2, 3, 10, 18),
+  cauchy         = c(800),
+  rdeath         = c(2, 7, 200),
+  rdependent     = c(20, 82),
+  rnonidentical  = c(3, 10)
+)
+n_show_table <- list(
+  normal         = c(1, 5, 20),
+  uniform        = c(2, 7, 10),
+  die            = c(7, 12, 22, 30, 34),
+  exponential    = c(10, 23, 33, 100, 800),
+  poisson        = c(5, 15, 150, 500),
+  binomial_small = c(6, 27, 200, 500),
+  binomial_large = c(2, 3, 10, 18),
+  cauchy         = c(100, 300, 500, 800),
+  rdeath         = c(2, 7, 100, 200),
+  rdependent     = c(10, 82, 200, 500),
+  rnonidentical  = c(1, 3, 10, 20)
+)
+get_n_plot  <- function(d) if (!is.null(n_show_plot[[d]]))  n_show_plot[[d]]  else pick_n(d)
+get_n_table <- function(d) if (!is.null(n_show_table[[d]])) n_show_table[[d]] else pick_n(d)
 ```
 
 ```{r}
@@ -282,7 +345,7 @@ plot_convergence <- function(d) {
 }
 
 # Pull in the PNGs exported by main.R: histogram then Q-Q plot for each n
-show_hist_qq <- function(d, ns = get_n(d)) {
+show_hist_qq <- function(d, ns = get_n_plot(d)) {
   ns <- as.integer(ns)
   f <- as.vector(rbind(file.path(fig_dir, sprintf("%s_hist_n%d.png", d, ns)),
                        file.path(fig_dir, sprintf("%s_qq_n%d.png",   d, ns))))
@@ -296,17 +359,34 @@ show_hist_qq <- function(d, ns = get_n(d)) {
 }
 
 # Formal normality diagnostics for the selected n
-stats_table <- function(d, ns = get_n(d)) {
+stats_table <- function(d, ns = get_n_table(d)) {
   x <- res[res$dist == d & res$n %in% ns, ]
-  cols <- intersect(c("n", "Mean", "SD", "Skewness", "Z_s", "Kurtosis", "Z_k", p_cols), names(x))
+  # Each test's statistic is shown next to its p-value: W & p, D & p, A & p, chi-square & p
+  test_cols <- c("SW_W", "SW_p", "Lillie_D", "Lillie_p", "AD_A", "AD_p", "DP_Chi2", "DP_p")
+  cols <- intersect(c("n", "Mean", "SD", "Skewness", "Z_s", "Kurtosis", "Z_k", test_cols), names(x))
   df <- x[, cols, drop = FALSE]
   for (v in intersect(p_cols, names(df))) df[[v]] <- fmt_p(df[[v]])
-  gt(df) |>
+  g <- gt(df) |>
     cols_label(.list = as.list(col_labels[names(col_labels) %in% names(df)])) |>
     fmt_number(columns = any_of(c("Mean", "SD", "Skewness", "Kurtosis", "Z_s", "Z_k")),
                decimals = 3) |>
-    fmt_integer(columns = "n") |>
-    style_gt(12)
+    fmt_number(columns = any_of(c("SW_W", "Lillie_D")), decimals = 4) |>
+    fmt_number(columns = any_of(c("AD_A", "DP_Chi2")), decimals = 3) |>
+    fmt_integer(columns = "n")
+  # Short labels under a spanner for each test (the spanner names the test)
+  tests <- list("Shapiro–Wilk"        = c(stat = "SW_W",    p = "SW_p"),
+                "Lilliefors (KS)"     = c(stat = "Lillie_D", p = "Lillie_p"),
+                "Anderson–Darling"    = c(stat = "AD_A",    p = "AD_p"),
+                "D'Agostino–Pearson"  = c(stat = "DP_Chi2", p = "DP_p"))
+  stat_lab <- c(SW_W = "W", Lillie_D = "D", AD_A = "A", DP_Chi2 = "χ²")
+  for (t in names(tests)) {
+    cc <- tests[[t]][tests[[t]] %in% names(df)]
+    if (!length(cc)) next
+    g <- tab_spanner(g, label = t, columns = all_of(unname(cc)))
+    lab <- c(stat_lab[names(stat_lab) %in% cc], setNames("p", intersect(cc, p_cols)))
+    g <- cols_label(g, .list = as.list(lab[names(lab) %in% names(df)]))
+  }
+  style_gt(g, 11)
 }
 ```
 
@@ -316,8 +396,9 @@ stats_table <- function(d, ns = get_n(d)) {
 # ---- EDIT HERE: your judgement calls ------------------------------------------
 # Smallest n you defend as normal enough. NA = use the automatic rule from setup.
 n_final <- setNames(rep(NA_real_, nrow(meta)), meta$dist)
-n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 23, poisson = 15,
-             binomial_small = 27, binomial_large = 2, rdeath = 7)
+n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 27, poisson = 15,
+             binomial_small = 50, binomial_large = 2, rdeath = 20,
+             rdependent = 82, rnonidentical = 3)
 n_final[names(n_given)] <- n_given
 
 # Distributions for which no n works (CLT assumptions violated): reported as "None"
@@ -371,21 +452,21 @@ The sample size $n$ to which the sampling distribution yields adequately "normal
 ::: finding-grid
 ::: {.finding .fast}
 <div class="tag">Fast</div>
-<div class="big">n ≤ 15</div>
+<div class="big">n ≤ 12</div>
 <p>Symmetrical, light-tailed</p>
-<p>Distributions: Normal, Uniform, Die, Poisson, Binomial Large, Death distribution</p>
+<p>Distributions: Normal (n = 1), Uniform (n = 7), Die (n = 12), Binomial Large (n = 2)</p>
 :::
 ::: {.finding .mod}
 <div class="tag">Moderate</div>
-<div class="big">n ≈ 30</div>
+<div class="big">n = 15–27</div>
 <p>Highly discrete or skewed</p>
-<p>Distributions: Exponential, Binomial Small</p>
+<p>Distributions: Poisson (n = 15), Exponential (n = 27), Death distribution (n = 20)</p>
 :::
 ::: {.finding .slow}
 <div class="tag">Slow</div>
-<div class="big">n ≫ 30</div>
+<div class="big">n = 50</div>
 <p>Heavily skewed</p>
-<p>Distributions:</p>
+<p>Distributions: Binomial Small (n = 50)</p>
 :::
 ::: {.finding .fail}
 <div class="tag">Fails</div>
@@ -632,6 +713,15 @@ The **histogram (`hist()`)** was used to assess whether the sampling distributio
 
 The normal **Q–Q plot (`qqnorm()`)** was used to assess whether the ordered sample means followed an approximately straight-line pattern. Small, unsystematic deviations are acceptable, but systematic curvature or large tail departures suggest non-normality.
 
+For reference, at $n = 1$ each sample mean is a single draw from the Normal(0, 1) population, so the figure below shows what an exactly normal sampling distribution looks like: a bell-shaped histogram that follows the fitted curve, and Q–Q points that lie on the line.
+
+```{r}
+#| label: fig-graphical-example
+#| fig-cap: "Illustration of normal histogram (left) and normal Q–Q plot (right) for Normal(0, 1)"
+#| layout-ncol: 2
+show_hist_qq("normal", ns = 1)
+```
+
 ### Formal Normality Tests
 
 The  **Shapiro–Wilk (SW) (`shapiro.test()`)** test, from the `stats` library, compares the ordered sample observations with the expected order statistics from a normal distribution and summarizes their agreement with the \(W\)-statistic. Values of \(W\) closer to \(1\) indicate strong overlap with the normal bell curve and Q-Q plot. The statistic provides a numerical supplement to the visual histogram and Q–Q plot.
@@ -650,7 +740,7 @@ p-value for this test serve same function as the Shapiro–Wilk test.
 #| label: fig-ks-test
 #| fig-cap: "Illustration of the Lilliefors-corrected Kolmogorov–Smirnov test."
 #| fig-alt: "Empirical and fitted normal cumulative distribution functions used to calculate the KS statistic."
-#| out-width: 50%
+#| out-width: 60%
 
 knitr::include_graphics("images/fig-ks-test.png")
 ```
@@ -683,20 +773,26 @@ Because $R = `r format(R, big.mark = ",")`$, these tests have high statistical p
 
 ## All Statistics
 
+The table summarizes the selected minimum sample size, \(n\), for each population distribution. The selected value is the smallest tested \(n\) at which most or all test satisfied the practical tolerances specified in Section 2.3.
+
+Dependent, highly skewed, and heavy-tailed populations often became approximately normal in the center while retaining noticeable deviations in the tails. Because tail convergence generally occurs more slowly than central convergence, the selected \(n\) was based on the combined evidence from the moment statistics, graphical diagnostics, and formal tests. When the tail-sensitive tests indicated departures but the remaining diagnostics supported approximate normality, the value of \(n\) was retained as a practical convergence point. Stricter tail tolerances would require a larger sample size. See the individual distribution sections for more detail discussion.
+
+
 ```{r}
 #| label: tbl-detail
-#| tbl-cap: "Every statistic for each population at the smallest sample size judged normal. A check mark means that row meets the normal-enough thresholds. Cauchy has no such n, so its largest tested n is shown."
+#| tbl-cap: "Every statistic for each population at the smallest sample size judged normal, with the normality-test statistics (W, D, A, χ²). A check mark means that row meets the normal-enough thresholds. Cauchy has no such n, so its largest tested n is shown."
 detail <- do.call(rbind, lapply(meta$dist, report_row))
 detail$Ok <- ifelse(!is.na(detail$normal_enough) & detail$normal_enough, "✓", "")
 dcols <- intersect(c("label", "n", "Mean", "Median", "SD", "Skewness", "Z_s", "Kurtosis",
-                     "Z_k", p_cols, "Ok"), names(detail))
+                     "Z_k", stat_cols, "Ok"), names(detail))
 dd <- detail[, dcols, drop = FALSE]
 dd$label <- as.character(dd$label)
-for (v in intersect(p_cols, names(dd))) dd[[v]] <- fmt_p(dd[[v]])
 gt(dd) |>
   cols_label(.list = as.list(col_labels[names(col_labels) %in% names(dd)])) |>
   fmt_number(columns = any_of(c("Mean", "Median", "SD", "Skewness", "Kurtosis", "Z_s", "Z_k")),
              decimals = 3) |>
+  fmt_number(columns = any_of(c("SW_W", "Lillie_D")), decimals = 4) |>
+  fmt_number(columns = any_of(c("AD_A", "DP_Chi2")), decimals = 3) |>
   fmt_integer(columns = "n") |>
   sub_missing(missing_text = "—") |>
   style_gt(12)
@@ -706,7 +802,7 @@ gt(dd) |>
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The population distribution is already normal. A small sample size is expected to be sufficient to produce a normal sampling distribution.*
 
 ```{r}
 #| label: fig-pop-normal
@@ -724,7 +820,7 @@ plot_population("normal")
 plot_convergence("normal")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*For the normal population, all evaluated moment statistics were within the predefined tolerances beginning at \(n=1\). This is expected because n = 1 is equivalent to selecting the normal population. As \(n\) increased, the statistics remained stable and showed no evidence of divergence from the normal benchmarks.*
 
 ### Histograms and Q–Q Plots
 
@@ -735,7 +831,7 @@ plot_convergence("normal")
 show_hist_qq("normal")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*The histogram closely follows the fitted normal density curve. The observations also follow the Q–Q reference line, with only a few outliers at the extreme tails.*
 
 ### Formal Test Results
 
@@ -745,15 +841,17 @@ show_hist_qq("normal")
 stats_table("normal")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*All formal statistical tests produced statistic values within the tolerances specified in Section 2.3 and \(p\)-values greater than \(0.05\). Therefore, there was insufficient evidence to reject the null hypothesis of normality.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Normal distribution: n = 1
+:::
 
 ## Uniform(0, 1)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The population distribution is continuous and already symmetrical. A relatively low n is expected for convergence.*
 
 ```{r}
 #| label: fig-pop-uniform
@@ -771,7 +869,7 @@ plot_population("uniform")
 plot_convergence("uniform")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*Surprisingly, the moment statistics are within the tolerance of Section 2.3 as soon as n = 2, and they continue to converge and stabilize as n increases.*
 
 ### Histograms and Q–Q Plots
 
@@ -782,7 +880,7 @@ plot_convergence("uniform")
 show_hist_qq("uniform")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*At \(n=2\), the histogram is broadly consistent with the fitted normal curve, although the Q–Q plot still shows noticeable curvature away from the reference line. By \(n=7\), the Q–Q points follow the reference line more closely, indicating improved agreement with normality.*
 
 ### Formal Test Results
 
@@ -792,15 +890,18 @@ show_hist_qq("uniform")
 stats_table("uniform")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*All formal statistics satisfied the specified criteria starting at n = 7, which is a reasonable number of sampling points. As a result, n = 7 was chosen instead of the more liberal value of n = 2. If there are barriers to sampling 7 data points, n = 2 could reasonably be used for exploratory approximation.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Uniform distribution: n = 7
+:::
+
 
 ## Six-sided die
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The population distribution is highly discrete. A moderate sample size n is expected for the CLT.*
 
 ```{r}
 #| label: fig-pop-die
@@ -818,7 +919,7 @@ plot_population("die")
 plot_convergence("die")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*Similar to the Uniform distribution, the moment statistics are, surprisingly, within the tolerance of Section 2.3 as soon as n = 2, and they continue to converge and stabilize as n increases.*
 
 ### Histograms and Q–Q Plots
 
@@ -829,7 +930,9 @@ plot_convergence("die")
 show_hist_qq("die")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*The histograms generally followed the fitted normal curve. However, the bars did not completely smooth into a bell-shaped curve at larger \(n\). This may reflect the default histogram binning and the discrete nature of the underlying distribution rather than a substantial departure from normality.*
+
+*The Q–Q plots also showed a small staircase pattern caused by the discrete sample means. As \(n\) increased, the points generally moved closer to the normal reference line. For \(n \ll 12\), noticeable deviations remained, including near the center of the distribution.*
 
 ### Formal Test Results
 
@@ -839,15 +942,21 @@ show_hist_qq("die")
 stats_table("die")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*The Shapiro–Wilk \(W\)-statistic exceeded the tolerance of \(0.99\) beginning at \(n=4\). The D’Agostino–Pearson chi-square statistic remained below the \(95\%\) critical value of \(5.991\) beginning at \(n=12\). Although the Anderson–Darling \(A\)-statistic remained above the practical threshold of \(1\), even at \(n=50\), this indicates residual tail deviations rather than substantial non-normality in the center. Since the other diagnostics supported approximate normality by \(n=12\), \(n=12\) was selected as the practical convergence point.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+*For all of the former tests, the \(p\)-values are below the 0.05 threshold required to retain the null hypothesis. However, since R = 10,000 is relatively large, the \(p\)-values were ignored because all other statistics support the normality assumption.*
+
+**Comparison to hypothesis:** *Convergence was relatively fast, unlike the original prediction.*
+
+::: {.callout-note appearance="default"}
+## Six-sided die distribution: n = 12
+:::
 
 ## Exponential(1)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The population distribution is highly skewed. A moderate n is expected to satisfy the CLT.*
 
 ```{r}
 #| label: fig-pop-exponential
@@ -865,7 +974,7 @@ plot_population("exponential")
 plot_convergence("exponential")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*Skewness and kurtosis are within their tolerances of 0.5 and 1, respectively, at n = 16. The sample mean and standard deviation are also within 0.1 of their theoretical values.*
 
 ### Histograms and Q–Q Plots
 
@@ -886,15 +995,15 @@ show_hist_qq("exponential")
 stats_table("exponential")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
-
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Exponential distribution: n = 23
+:::
 
 ## Poisson(1)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The population distribution is discrete and heavily skewed. A moderate to high n is expected for the CLT.*
 
 ```{r}
 #| label: fig-pop-poisson
@@ -912,7 +1021,7 @@ plot_population("poisson")
 plot_convergence("poisson")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*The moment statistics are already within tolerance starting at n = 4. There is some noise at very high n, but the values are stable and converging to their tolerances.*
 
 ### Histograms and Q–Q Plots
 
@@ -923,7 +1032,9 @@ plot_convergence("poisson")
 show_hist_qq("poisson")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*A discrete distribution is a little more difficult to judge. The histograms are relatively close to the normal curve but do not smooth out until very high n.*
+
+*The Q–Q plot shows left-tail divergence at n < 18. For 18 < n < 30, the left tail starts converging to the normal straight line, but the right tail starts to diverge. Visually, the data points follow the straight line relatively well around n = 27.*
 
 ### Formal Test Results
 
@@ -933,15 +1044,19 @@ show_hist_qq("poisson")
 stats_table("poisson")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*The Shapiro–Wilk W statistic is within the tolerance at n = 15, suggesting that most of the data follow the normal expectation. The D statistic of the K–S test is approximately 0, indicating a maximum difference of less than 1% in the CDF between the sampling distribution and the normal distribution at any single point.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+*The D’Agostino–Pearson chi-square statistic and Anderson–Darling \(A\)-statistic remained substantially high even at n=500, which indicates residual tail deviations rather than non-normality in the center.*
+
+::: {.callout-note appearance="default"}
+## Exponential distribution: n = 27, the higher n value, which supports normality for most of the numerical and graphical tests.
+:::
 
 ## Small Binomial(5, 0.10)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The distribution is discrete and skewed. A moderate n is expected for the CLT.*
 
 ```{r}
 #| label: fig-pop-binomial-small
@@ -959,7 +1074,7 @@ plot_population("binomial_small")
 plot_convergence("binomial_small")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*The moment statistics are within tolerance at n = 6.*
 
 ### Histograms and Q–Q Plots
 
@@ -970,7 +1085,7 @@ plot_convergence("binomial_small")
 show_hist_qq("binomial_small")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*The Q–Q plot shows tail deviations alternating back and forth until n = 50.*
 
 ### Formal Test Results
 
@@ -980,9 +1095,11 @@ show_hist_qq("binomial_small")
 stats_table("binomial_small")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*The Shapiro–Wilk W value is within tolerance at n = 27. The D statistic is also approximately 0 at this n, showing a close match with the normal distribution CDF. The A and χ² statistics do not reach tolerance until n = 500, demonstrating substantial tail divergence, as seen in the graphical tests.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Binomial small distribution: n = 50, based on the graphical tests. A smaller n of about 30 could be used with a more liberal tolerance.
+:::
 
 ## Large Binomial(20, 0.50)
 
@@ -1006,7 +1123,7 @@ plot_population("binomial_large")
 plot_convergence("binomial_large")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*The moment statistics are within tolerance at n = 1.*
 
 ### Histograms and Q–Q Plots
 
@@ -1017,7 +1134,7 @@ plot_convergence("binomial_large")
 show_hist_qq("binomial_large")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*At n = 1, the Q–Q plot still shows noticeable deviation from the normal line. At n = 2, the match is much closer.*
 
 ### Formal Test Results
 
@@ -1027,15 +1144,17 @@ show_hist_qq("binomial_large")
 stats_table("binomial_large")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*The W, D, and χ² statistics are all within tolerance at n = 2. The A statistic is relatively high, probably due to the tail behavior. Since all other tests support normality at the center of the data, n = 2 was chosen.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Binomial large distribution: n = 2
+:::
 
 ## Cauchy(0, 1)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The distribution does not have a finite mean or variance, so the CLT is expected to fail.*
 
 ```{r}
 #| label: fig-pop-cauchy
@@ -1053,18 +1172,7 @@ plot_population("cauchy")
 plot_convergence("cauchy")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
-
-### Histograms and Q–Q Plots
-
-```{r}
-#| label: fig-hq-cauchy
-#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
-#| layout-ncol: 2
-show_hist_qq("cauchy")
-```
-
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*All graphs show that the mean, skewness, kurtosis, and SE are not converging to their tolerances, demonstrating that the sampling distribution is not normal for any n.*
 
 ### Formal Test Results
 
@@ -1074,15 +1182,17 @@ show_hist_qq("cauchy")
 stats_table("cauchy")
 ```
 
-**Chosen n and justification.** *(State that no n is defensible and why: no finite mean or variance, so the sample mean is itself Cauchy at every n.)*
+*All formal normality statistics are significantly lower and/or higher than their tolerances, demonstrating significant deviation from normality.*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+::: {.callout-note appearance="default"}
+## Cauchy: n = none. All tests point to the conclusion that the sampling distribution of the sample mean never becomes normal for the Cauchy distribution. The Cauchy distribution violates the CLT assumption of a finite mean and variance.
+:::
 
 ## Age at death (bimodal)
 
 ### Description
 
-**Prediction before running.** *(What do you expect for this population, and why?)*
+*The distribution has two peaks. A moderate or high n is expected for the CLT.*
 
 ```{r}
 #| label: fig-pop-rdeath
@@ -1100,7 +1210,7 @@ plot_population("rdeath")
 plot_convergence("rdeath")
 ```
 
-*(Describe how each statistic changes with n and when it enters the tolerance band.)*
+*Skewness and kurtosis are within tolerance at n = 4. The mean and SD are within 1% of their theoretical values.*
 
 ### Histograms and Q–Q Plots
 
@@ -1111,7 +1221,7 @@ plot_convergence("rdeath")
 show_hist_qq("rdeath")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*There is a very heavy right-tail deviation at n = 4. The center of the Q–Q plot follows the normal line more closely starting around n = 20.*
 
 ### Formal Test Results
 
@@ -1119,6 +1229,142 @@ show_hist_qq("rdeath")
 #| label: tbl-stats-rdeath
 #| tbl-cap: "Normality diagnostics for Age at death (bimodal) at the selected n."
 stats_table("rdeath")
+```
+
+*The W statistic is within tolerance at n = 7. The D statistic is approximately 0 as well. The A and χ² statistics are within practical tolerance around n = 200; the tails take longer to converge.*
+
+::: {.callout-note appearance="default"}
+## Death distribution: n = 20, based on the graphical tests.
+:::
+
+## Machine failure (dependent)
+
+### Description
+
+*Each machine's operating time is exponential, but its rate depends on the previous operating time: $X_1 \sim \text{Exp}(1)$ and $X_t \sim \text{Exp}\big(\lambda_t = e^{1.25(X_{t-1}-1)}\big)$. The observations are therefore **not independent**, which violates the classical CLT assumption.*
+
+**Prediction before running.**
+
+*The classical CLT requires independence, but versions of the CLT exist for dependent data. They require (1) short memory, meaning the dependence dies off quickly (for example geometric ergodicity or mixing), (2) finite variance, and (3) stationarity or convergence to a stationary distribution. Long-memory processes, where autocorrelations decay slowly (Hurst exponent $H > 0.5$), fail these conditions because the SD of the sample mean shrinks more slowly than $1/\sqrt{n}$.*
+
+*This process is expected to satisfy all three conditions:*
+
+- ***Finite variance and light tails.** For $x \ge 0$, the rate is at least $e^{-1.25} \approx 0.29$, so every operating time is stochastically dominated by an Exponential(0.29) variable. All moments are therefore finite, unlike the Cauchy case.*
+- ***Short memory.** A long operating time produces a very large next rate and hence a very short next time, and vice versa. The chain forgets its past quickly, so the dependence should decay geometrically.*
+- ***Negative dependence.** The same feedback (long time, then short time) suggests a clearly negative lag-1 autocorrelation.*
+
+*Prediction: the CLT should still hold, so the sampling distribution of the mean should become approximately normal. The usual standard error $\sigma/\sqrt{n}$ should not be correct, however.*
+
+```{r}
+#| label: fig-pop-rdependent
+#| fig-cap: "Population distribution for Machine failure (dependent) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("rdependent")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-rdependent
+#| fig-cap: "How the sampling distribution of the mean changes with n for Machine failure (dependent). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("rdependent")
+```
+
+**How the dependence changes the standard error.** *For dependent data the CLT variance is the asymptotic variance, not $\sigma^2$:*
+
+$$
+\sigma^2_{\text{as}} = \gamma_0 + 2\sum_{k=1}^{\infty}\gamma_k, \qquad \text{SD}(\bar{X}_n) \approx \frac{\sigma_{\text{as}}}{\sqrt{n}},
+$$
+
+*where $\gamma_k$ is the lag-$k$ autocovariance. If the lag-1 autocorrelation is negative, as predicted, then $\sigma^2_{\text{as}} < \sigma^2$. The sample mean is then more concentrated than an independent sample of the same size, and the effective sample size exceeds $n$. In the Standard error panel above, the simulated SE should therefore fall **below** the "Theory $\sigma/\sqrt{n}$" line, which assumes independence. A gap between the two lines is evidence of dependence, not of a failed CLT. A useful check is to plot $n \cdot \text{Var}(\bar{X}_n)$ against $n$: if the CLT variance holds, it should level off at $\sigma^2_{\text{as}}$.*
+
+**Two other effects to expect.**
+
+- ***Start-up bias at small n.** Every replicate starts at $X_1 \sim \text{Exp}(1)$, which is not the stationary distribution of the chain. The mean of $\bar{X}_n$ is therefore biased for small $n$, and the bias should fade as $n$ grows.*
+- ***Skewness persists at small n.** The marginal distribution is still right-skewed, so very small $n$ should look non-normal. The skewness of the mean should shrink roughly like $1/\sqrt{n_{\text{eff}}}$, and negative dependence should help it converge faster than for an independent Exponential(1).*
+
+*These are predictions from theory. The values at which skewness and kurtosis enter the tolerance bands should be read from the figure above.*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-rdependent
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("rdependent")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-rdependent
+#| tbl-cap: "Normality diagnostics for Machine failure (dependent) at the selected n."
+stats_table("rdependent")
+```
+
+**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+
+**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+
+## Basketball shots (non-identical)
+
+### Description
+
+*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are **non-identically distributed**.*
+
+**What is actually being averaged.** *The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
+
+- *Mean $\mu = \sum p_i = 14$ shots (compare 14 for a Binomial(20, 0.7)).*
+- *Variance $\sigma^2 = \sum p_i(1-p_i) \approx 3.905$, so $\sigma \approx 1.976$. This is below the Binomial(20, 0.7) variance of 4.2, because unequal probabilities make the total less variable.*
+- *Skewness $\approx -0.17$ and excess kurtosis $\approx -0.06$. A single game is already close to normal, with a slight left skew because the mean is well above 10.*
+
+**Prediction before running.**
+
+*Because the game totals are iid with finite variance, the classical CLT applies directly and the expected behavior is close to the Large Binomial(20, 0.50) case:*
+
+- *Convergence should be very fast. A single game is bounded, light-tailed, nearly symmetric, and has a skewness and kurtosis already inside the tolerance bands at $n = 1$. The normal-enough threshold should be reached at very small $n$ (the report uses $n = 3$), with remaining deviations coming from discreteness, such as a staircase pattern in the Q-Q plot at small $n$.*
+- *The mean of the sample means should be about 14, and the simulated SE should match $\sigma/\sqrt{n}$ closely. Unlike the dependent machine-failure case, the usual standard error formula is valid here.*
+
+**Contrast with a genuinely non-identical average.** *If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.*
+
+```{r}
+#| label: fig-pop-rnonidentical
+#| fig-cap: "Population distribution for Basketball shots (non-identical) (50,000 simulated draws). The dashed line marks the mean."
+#| fig-height: 3.4
+plot_population("rnonidentical")
+```
+
+### Convergence of the Mean, Median, Skewness and Kurtosis
+
+```{r}
+#| label: fig-conv-rnonidentical
+#| fig-cap: "How the sampling distribution of the mean changes with n for Basketball shots (non-identical). Shaded bands mark the normal-enough tolerance; dotted lines mark the target for a normal distribution."
+#| fig-height: 6.5
+plot_convergence("rnonidentical")
+```
+
+*The convergence plot should be read against the theory above: the simulated SE should track the "Theory $\sigma/\sqrt{n}$" line, and the skewness and kurtosis should already sit inside their tolerance bands at very small $n$. Because the exact skewness of a single game is about $-0.17$, the skewness of the mean should shrink toward 0 like $1/\sqrt{n}$. Read the $n$ at which each statistic enters its band from the figure.*
+
+### Histograms and Q–Q Plots
+
+```{r}
+#| label: fig-hq-rnonidentical
+#| fig-cap: "Histogram (left) and normal Q–Q plot (right) of the sample means at selected n."
+#| layout-ncol: 2
+show_hist_qq("rnonidentical")
+```
+
+*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+
+### Formal Test Results
+
+```{r}
+#| label: tbl-stats-rnonidentical
+#| tbl-cap: "Normality diagnostics for Basketball shots (non-identical) at the selected n."
+stats_table("rnonidentical")
 ```
 
 **Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
@@ -1137,7 +1383,7 @@ stats_table("rdeath")
 
 ## Scope of the Current Report
 
-This version examines four independent, identically distributed populations with finite variance: Normal, Uniform, a six-sided die, and Exponential. Dependent, non-identical, and heavy-tailed populations will be added in a later version.
+This version examines ...
 
 ## Limitations
 
@@ -1189,33 +1435,41 @@ kable(data.frame(
 
 ## AI Prompts for This Project
 
+- I was having trouble understanding what I needed to sample for the dependent distribution:
+  
+  **Prompt**: Here is the code provided by my professor on a dependent distribution machine failure. What should I sample and average to test the CLT based on this document?
+  **AI response**:
 ```{r}
-#| label: appendix-ai
-#| results: asis
-#| echo: false
-if (file.exists("ai_prompts.md")) {
-  cat(readLines("ai_prompts.md", warn = FALSE), sep = "\n")
-} else {
-  cat("*Create `ai_prompts.md` in the project root with your prompts, follow-up prompts, ",
-      "and how you checked or corrected the results. It is included here automatically.*")
-}
+#| label: AI-response
+#| fig-cap: "Illustration of the Lilliefors-corrected Kolmogorov–Smirnov test."
+#| fig-alt: "Empirical and fitted normal cumulative distribution functions used to calculate the KS statistic."
+#| out-width: 60%
+
+knitr::include_graphics("images/AI-Prompt-Dependent-Distribution.jpg")
 ```
+  **Followup**: how to put the new rdependent function into my automation structure
+  **AI response**
+```{r}
+#| label: AI-response-follow-up
+#| fig-cap: "Illustration of the Lilliefors-corrected Kolmogorov–Smirnov test."
+#| fig-alt: "Empirical and fitted normal cumulative distribution functions used to calculate the KS statistic."
+#| out-width: 60%
+
+knitr::include_graphics("images/AI-Prompt-Dependent-Distribution-2.jpg")
+```
+  
 
 ## Sources
 
 *Check each entry against your own sources before submitting.*
 
-- Anderson, T. W., & Darling, D. A. (1952). Asymptotic theory of certain "goodness of fit" criteria based on stochastic processes. *Annals of Mathematical Statistics, 23*(2), 193–212.
-- D'Agostino, R., & Pearson, E. S. (1973). Tests for departure from normality. *Biometrika, 60*(3), 613–622.
-- Lilliefors, H. W. (1967). On the Kolmogorov–Smirnov test for normality with mean and variance unknown. *Journal of the American Statistical Association, 62*(318), 399–402.
-- Shapiro, S. S., & Wilk, M. B. (1965). An analysis of variance test for normality (complete samples). *Biometrika, 52*(3–4), 591–611.
-- Labmeier, G. *Project 1: How Fast Does Normal Happen?* and *CLT Project 1: What I Am Looking For* (course materials).
-- R Core Team. *R: A Language and Environment for Statistical Computing.* R Foundation for Statistical Computing, Vienna, Austria.
-- R packages: moments, nortest, fBasics, ggplot2, gt, scales, knitr.
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC3591587/
+- https://statisticsfundamentals.com/descriptive-statistics/skewness-and-kurtosis/
+- https://statisticsfundamentals.com/tables/anderson-darling-table/
+- https://lean6sigmahub.com/how-to-perform-the-shapiro-wilk-test-a-complete-guide-to-testing-data-normality/
+- https://www.sciencedirect.com/science/chapter/edited-volume/abs/pii/B978012813543300007X
+- https://www.clinicalbiostats.com/tables/shapiro-wilk-test-table/
+- https://www.statology.org/central-limit-theorem-conditions/
+- http://www.ledoit.net/TimCrack_CLT_Dependent_JFEduc_2010.pdf
+- https://link.springer.com/chapter/10.1007/978-0-387-75971-5_9
 
-## Session Information
-
-```{r}
-#| label: session
-sessionInfo()
-```
