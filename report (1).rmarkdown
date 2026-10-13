@@ -1305,30 +1305,22 @@ show_hist_qq("rdependent")
 stats_table("rdependent")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
 
 ## Basketball shots (non-identical)
 
 ### Description
 
-*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are **non-identically distributed**.*
+*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are non-identically distributed**.*
 
-**What is actually being averaged.** *The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
+*The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
 
-- *Mean $\mu = \sum p_i = 14$ shots (compare 14 for a Binomial(20, 0.7)).*
-- *Variance $\sigma^2 = \sum p_i(1-p_i) \approx 3.905$, so $\sigma \approx 1.976$. This is below the Binomial(20, 0.7) variance of 4.2, because unequal probabilities make the total less variable.*
-- *Skewness $\approx -0.17$ and excess kurtosis $\approx -0.06$. A single game is already close to normal, with a slight left skew because the mean is well above 10.*
-
-**Prediction before running.**
+- *Mean $\mu = \sum p_i = 14$ shots.*
+- *Variance $\sigma^2 = \sum p_i(1-p_i) \approx 3.905$, so $\sigma \approx 1.976$*
+- *Skewness $\approx -0.17$ and excess kurtosis $\approx -0.06$. A single game is close to normal, with a slight left skew*
 
 *Because the game totals are iid with finite variance, the classical CLT applies directly and the expected behavior is close to the Large Binomial(20, 0.50) case:*
 
-- *Convergence should be very fast. A single game is bounded, light-tailed, nearly symmetric, and has a skewness and kurtosis already inside the tolerance bands at $n = 1$. The normal-enough threshold should be reached at very small $n$ (the report uses $n = 3$), with remaining deviations coming from discreteness, such as a staircase pattern in the Q-Q plot at small $n$.*
-- *The mean of the sample means should be about 14, and the simulated SE should match $\sigma/\sqrt{n}$ closely. Unlike the dependent machine-failure case, the usual standard error formula is valid here.*
-
-**Contrast with a genuinely non-identical average.** *If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.*
 
 ```{r}
 #| label: fig-pop-rnonidentical
@@ -1346,7 +1338,7 @@ plot_population("rnonidentical")
 plot_convergence("rnonidentical")
 ```
 
-*The convergence plot should be read against the theory above: the simulated SE should track the "Theory $\sigma/\sqrt{n}$" line, and the skewness and kurtosis should already sit inside their tolerance bands at very small $n$. Because the exact skewness of a single game is about $-0.17$, the skewness of the mean should shrink toward 0 like $1/\sqrt{n}$. Read the $n$ at which each statistic enters its band from the figure.*
+*Moment statistics are within the tolerance, even at small n*
 
 ### Histograms and Q–Q Plots
 
@@ -1357,7 +1349,7 @@ plot_convergence("rnonidentical")
 show_hist_qq("rnonidentical")
 ```
 
-*(Interpret the shape of the histogram and the Q–Q plot at each n.)*
+*At low n, the discrete data points are still noticably deviated from the normal line. Data start to converge around n = 10.*
 
 ### Formal Test Results
 
@@ -1367,37 +1359,26 @@ show_hist_qq("rnonidentical")
 stats_table("rnonidentical")
 ```
 
-**Chosen n and justification.** *(The smallest n you defend as normal enough, supported by the evidence above.)*
+*W statistic is within tolerance at n = 3. The Chi square statistic is within tolerance at n = 10*
 
-**What surprised me.** *(At least one feature of this simulation you did not expect.)*
+**Contrast with a genuinely non-identical average.** *If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.*
+
+::: {.callout-note appearance="default"}
+## Binomial large distribution: n = 10
+::: 
 
 # Discussion
 
 ## Is n = 30 a Universal Rule?
 
-*(Answer with evidence from the summary table and figures.)*
-
-## How Population Shape Affects Convergence
-
-*(Which populations converged fastest and slowest, and why: skewness, discreteness, tails.)*
-
-## Scope of the Current Report
-
-This version examines ...
+The value for n depends on the population distribution. However, I was surprised some distribution resulted in a a normal sample distribution quite fast. For many distribution, the center of the sample distribution is approximately normal, per the moment and W statistics. However, the tail shows noticeable and/or significant deviations, requiring a larger n to adequately approx the distribution as normal.
 
 ## Limitations
 
-- The sample sizes tested form a grid, so the "smallest n" is resolved only to that grid.
-- The tolerance thresholds are a judgment call.
-- All results are Monte Carlo estimates with sampling error (SE of skewness ≈ `r round(sqrt(6 / R), 3)`).
+Some conditions of the classical Central Limit Theorem are more fundamental than others. In particular, the population must have a well-defined finite mean and finite variance. The Cauchy distribution violates these conditions: its mean is undefined and its variance is not finite. Consequently, the sample mean does not stabilize around a population mean and its sampling distribution does not converge to a normal distribution as \(n\) increases.
 
-## Practical Guidance
+Independence and identical distribution are also assumptions of the classical i.i.d. CLT, but they can be relaxed under more advanced versions of the theorem. For example, normal convergence may still occur when observations are weakly dependent or not identically distributed, provided additional conditions control the dependence structure and the contribution of individual observations. Violating them may change the rate of convergence or prevent convergence to a normal distribution, depending on the specific model.
 
-*(What a practitioner should do when choosing a sample size.)*
-
-# Conclusion
-
-*(Summarize the answer to the three guiding questions and state your overall conclusion about the n = 30 rule.)*
 
 # Appendix {.appendix}
 
