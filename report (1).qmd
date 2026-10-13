@@ -217,7 +217,7 @@ style_gt <- function(g, size = 13) {
                 table.width = pct(100),
                 data_row.padding = px(4)) |>
     tab_style(style = cell_text(color = "white", weight = "bold"),
-              locations = list(cells_column_labels(), cells_column_spanners()))
+              locations = cells_column_labels())
 }
 
 # p-values as text so very small values never break a table
@@ -386,7 +386,9 @@ stats_table <- function(d, ns = get_n_table(d)) {
     lab <- c(stat_lab[names(stat_lab) %in% cc], setNames("p", intersect(cc, p_cols)))
     g <- cols_label(g, .list = as.list(lab[names(lab) %in% names(df)]))
   }
-  style_gt(g, 11)
+  g <- style_gt(g, 11)
+  tab_style(g, style = cell_text(color = "white", weight = "bold"),
+            locations = cells_column_spanners())
 }
 ```
 
@@ -398,7 +400,7 @@ stats_table <- function(d, ns = get_n_table(d)) {
 n_final <- setNames(rep(NA_real_, nrow(meta)), meta$dist)
 n_given <- c(normal = 1, uniform = 7, die = 12, exponential = 27, poisson = 15,
              binomial_small = 50, binomial_large = 2, rdeath = 20,
-             rdependent = 82, rnonidentical = 3)
+             rdependent = 82, rnonidentical = 10)
 n_final[names(n_given)] <- n_given
 
 # Distributions for which no n works (CLT assumptions violated): reported as "None"
@@ -1311,7 +1313,7 @@ stats_table("rdependent")
 
 ### Description
 
-*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are non-identically distributed**.*
+*One observation is the number of shots made in a 20-shot game. Shot $i$ is an independent Bernoulli($p_i$) trial, with $p_i$ falling linearly from 0.90 (shot 1) to 0.50 (shot 20), so the shots within a game are non-identically distributed.*
 
 *The generator returns `n` game totals, and the sample mean averages those `n` totals. Each game is a fresh, independent draw from the same distribution (a Poisson-binomial), so the averaged observations are independent and identically distributed. The non-identical structure sits inside each observation, not across the observations being averaged. The exact moments of one game are:*
 
@@ -1364,8 +1366,8 @@ stats_table("rnonidentical")
 **Contrast with a genuinely non-identical average.** *If the quantity averaged were the individual shots, $X_i \sim \text{Bernoulli}(p_i)$ with different $p_i$, the observations would be independent but not identically distributed. The classical CLT would not apply as stated, but the Lindeberg-Feller CLT would, since each shot is bounded and the total variance $\sum p_i(1-p_i)$ grows without bound as shots are added. The standardization then uses $\sqrt{\sum p_i(1-p_i)}$ instead of $\sigma\sqrt{n}$, and the mean of the average is $\bar{p}$, not a common $\mu$. The CLT therefore still holds for non-identical independent observations when no single observation dominates the variance. The CLT can fail only if the variances are so unbalanced that one term dominates, or if the variances are infinite.*
 
 ::: {.callout-note appearance="default"}
-## Binomial large distribution: n = 10
-::: 
+## Basketball shots (non-identical): n = 10
+:::
 
 # Discussion
 
