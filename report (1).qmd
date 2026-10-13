@@ -1387,9 +1387,9 @@ The value for n depends on the population distribution. However, I was surprised
 
 ## Limitations
 
-Some conditions of the classical Central Limit Theorem are more fundamental than others. In particular, the population must have a well-defined finite mean and finite variance. The Cauchy distribution violates these conditions: its mean is undefined and its variance is not finite. Consequently, the sample mean does not stabilize around a population mean and its sampling distribution does not converge to a normal distribution as $n$ increases.
+The Cauchy distribution violates these conditions: its mean is undefined and its variance is not finite. Consequently, the sample mean does not stabilize around a population mean and its sampling distribution does not converge to a normal distribution as $n$ increases.
 
-Independence and identical distribution are also assumptions of the classical i.i.d. CLT, but they can be relaxed under more advanced versions of the theorem. For example, normal convergence may still occur when observations are weakly dependent or not identically distributed, provided additional conditions control the dependence structure and the contribution of individual observations. Violating them may change the rate of convergence or prevent convergence to a normal distribution, depending on the specific model.
+Independence and identical distribution are also assumptions of the classical CLT, but they can be relaxed under more advanced versions of the theorem. For example, normal convergence may still occur when observations are weakly dependent or not identically distributed, provided additional conditions control the dependence structure and the contribution of individual observations. Violating them may change the rate of convergence or prevent convergence to a normal distribution, depending on the specific model.
 
 
 # Appendix {.appendix}
@@ -1402,7 +1402,7 @@ Independence and identical distribution are also assumptions of the classical i.
 #| echo: false
 fence <- strrep("`", 3)
 script_files <- c("setup.R", file.path("scripts", c("config.R", "distribution_generators.R", "distributions.R",
-                  , "main.R")))
+                   "main.R")))
 script_files <- script_files[file.exists(script_files)]
 for (f in script_files) {
   cat("\n::: {.callout-note collapse=\"true\"}\n## ", f, "\n\n", sep = "")
@@ -1428,14 +1428,14 @@ kable(data.frame(
 
 ## AI Prompts for This Project
 
-- I was having trouble understanding what I needed to sample for the dependent distribution:
+- I was having trouble understanding what I needed to sample for the three custom distributions. This is one example of the AI prompt I used.
   
   **Prompt**: Here is the code provided by my professor on a dependent distribution machine failure. What should I sample and average to test the CLT based on this document?
   **AI response**:
 ```{r}
 #| label: AI-response
-#| fig-cap: "Illustration of the Lilliefors-corrected Kolmogorov–Smirnov test."
-#| fig-alt: "Empirical and fitted normal cumulative distribution functions used to calculate the KS statistic."
+#| fig-cap: "AI response to setting up the sampling of the custom distribution"
+#| fig-alt: "abc."
 #| out-width: 60%
 
 knitr::include_graphics("images/AI-Prompt-Dependent-Distribution.jpg")
@@ -1444,8 +1444,8 @@ knitr::include_graphics("images/AI-Prompt-Dependent-Distribution.jpg")
   **AI response**
 ```{r}
 #| label: AI-response-follow-up
-#| fig-cap: "Illustration of the Lilliefors-corrected Kolmogorov–Smirnov test."
-#| fig-alt: "Empirical and fitted normal cumulative distribution functions used to calculate the KS statistic."
+#| fig-cap: "AI response to setting up the sampling of the custom distribution"
+#| fig-alt: "abc"
 #| out-width: 60%
 
 knitr::include_graphics("images/AI-Prompt-Dependent-Distribution-2.jpg")
